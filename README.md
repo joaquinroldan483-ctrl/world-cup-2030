@@ -8,6 +8,13 @@ recorridos, estadísticas, pósters en alta resolución y **vídeo MP4 real** ge
 > información oficial. Proyecto de aficionados sin afiliación con la FIFA. Ningún resultado viene precargado: todos los
 > resultados los carga el usuario o los genera el simulador cuando el usuario lo pide.
 
+## Usarla en el teléfono (iPhone / Android)
+
+La app se publica sola en GitHub Pages con `.github/workflows/deploy.yml` en cada push a `main`
+(requiere *Settings → Pages → Source: GitHub Actions*). Abrí la dirección en Safari y tocá
+**Compartir → Agregar a pantalla de inicio**: queda instalada como app, a pantalla completa y con soporte sin conexión.
+En iPhone, «Guardar en Fotos» abre el menú de compartir para guardar pósters y vídeos.
+
 ## Puesta en marcha
 
 Requisitos: Node.js 20+ (probado con Node 22).

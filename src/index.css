@@ -55,6 +55,7 @@
 :root {
   color-scheme: dark;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
 }
 
 html, body, #root { min-height: 100%; }
@@ -69,6 +70,10 @@ body {
 }
 
 ::selection { background: rgb(232 184 74 / 0.35); }
+
+/* Grid tracks must never be widened by wide children (scrollers, tables): they scroll inside instead. */
+.grid > * { min-width: 0; }
+main { overflow-x: clip; }
 
 * { scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / 0.18) transparent; }
 

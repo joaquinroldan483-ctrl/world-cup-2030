@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ALL_TEAM_IDS, TEAMS, TEAM_BY_ID } from '../engine';
 import { Icon, type IconName } from '../components/Icon';
 import { Button, Card, cx, EmptyState, SectionHeader, Segmented, Select, TextInput } from '../components/ui';
-import { downloadBlob, formatBytes, shareFile, slugify } from '../lib/download';
+import { canShareFiles, downloadBlob, formatBytes, isIOS, shareFile, slugify } from '../lib/download';
 import { navigate } from '../lib/router';
 import { loadAssets, type MediaAssets } from '../media/canvasKit';
 import { POSTER_SIZES, posterPalette, renderPoster, type PosterFormat, type PosterOptions, type PosterStyle, type PosterTemplate } from '../media/poster';
@@ -87,6 +87,7 @@ export default function Poster({ param }: { param?: string }) {
     setBusy(true);
     try {
       const blob = await toBlob(type);
+      if (isIOS() && canShareFiles(type) && (await shareFile(blob, `${fileBase}.${type === 'image/png' ? 'png' : 'jpg'}`, 'World Cup 2030 — Legendary Poster'))) return;
       downloadBlob(blob, `${fileBase}.${type === 'image/png' ? 'png' : 'jpg'}`);
       toast({ kind: 'success', title: 'Póster descargado', message: `${W}×${H} · ${formatBytes(blob.size)}` });
     } catch (e) {
@@ -120,7 +121,7 @@ export default function Poster({ param }: { param?: string }) {
   return (
     <div>
       <SectionHeader eyebrow="Legendary Poster · Póster" title="Legendary Poster" subtitle="Diseñá un póster cinematográfico en alta resolución con el recorrido de una selección o el resumen del Mundial. Se genera como imagen real, lista para descargar y compartir." />
-      <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
         <Card className="space-y-5 p-5 xl:sticky xl:top-8 xl:self-start">
           <div>
             <div className="label mb-2">Plantilla</div>
@@ -167,7 +168,7 @@ export default function Poster({ param }: { param?: string }) {
             <TextInput placeholder="Subtítulo (opcional)" value={o.subtitle} maxLength={70} onChange={(e) => set({ subtitle: e.target.value })} />
           </div>
         </Card>
-        <div>
+        <div className="min-w-0">
           <Card className="p-3 sm:p-5">
             {unavailable ? (
               <div className="flex aspect-[4/5] flex-col items-center justify-center gap-3 text-center text-white/55">
@@ -181,7 +182,7 @@ export default function Poster({ param }: { param?: string }) {
               <canvas ref={canvas} width={W} height={H} className={cx('mx-auto block h-auto rounded-xl shadow-2xl', o.format === 'story' ? 'max-w-[420px]' : 'max-w-[640px]', 'w-full')} />
             )}
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-              <Button variant="gold" icon="download" disabled={busy || unavailable || !assets} onClick={() => download('image/png')}>Descargar PNG</Button>
+              <Button variant="gold" icon="download" disabled={busy || unavailable || !assets} onClick={() => download('image/png')}>{isIOS() ? 'Guardar en Fotos' : 'Descargar PNG'}</Button>
               <Button variant="outline" icon="download" disabled={busy || unavailable || !assets} onClick={() => download('image/jpeg')}>JPG</Button>
               <Button variant="outline" icon="share" disabled={busy || unavailable || !assets} onClick={share}>Compartir</Button>
             </div>

@@ -1,0 +1,17 @@
+{
+  "name": "World Cup 2030 — The Road to Glory",
+  "short_name": "WC 2030",
+  "description": "Simulador del Mundial 2030 de 64 selecciones: sorteo, grupos, eliminatorias, recorridos, pósters y vídeo.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#04070f",
+  "theme_color": "#04070f",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

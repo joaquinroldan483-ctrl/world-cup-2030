@@ -53,7 +53,7 @@ export function ToastHost() {
   const toasts = useUI((s) => s.toasts);
   const dismiss = useUI((s) => s.dismissToast);
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-3 z-[95] flex flex-col items-center gap-2 px-3 sm:items-end sm:pr-6">
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(0.75rem+var(--safe-top))] z-[95] flex flex-col items-center gap-2 px-3 sm:items-end sm:pr-6">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.button
@@ -123,7 +123,7 @@ export function CelebrationHost() {
     <AnimatePresence mode="wait">
       {current?.kind === 'match' && <MatchCelebration key={`m${current.matchId}${queue.length}`} matchId={current.matchId} onClose={shift} />}
       {current?.kind === 'qualified' && (
-        <motion.div key={`q${current.teamIds.join()}`} className="fixed inset-x-0 top-16 z-[90] flex justify-center px-4" initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -30, opacity: 0 }} onClick={shift}>
+        <motion.div key={`q${current.teamIds.join()}`} className="fixed inset-x-0 top-[calc(4rem+var(--safe-top))] z-[90] flex justify-center px-4" initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -30, opacity: 0 }} onClick={shift}>
           <div className="glass-strong flex max-w-xl items-center gap-4 rounded-2xl border-emerald/40 px-5 py-4">
             <div className="flex -space-x-2">
               {current.teamIds.slice(0, 4).map((id) => (

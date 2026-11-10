@@ -78,7 +78,7 @@ export function Shell({ section, children }: { section: SectionId; children: Rea
     <div className="min-h-dvh">
       <StadiumBackdrop />
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col border-r border-white/6 bg-night-950/70 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[264px] flex-col pt-[var(--safe-top)] border-r border-white/6 bg-night-950/70 backdrop-blur-xl lg:flex">
         <div className="h-1 host-stripe" />
         <button className="flex items-center gap-3 px-5 pb-5 pt-6 text-left" onClick={() => navigate('home')}>
           <Emblem size={46} />
@@ -123,7 +123,7 @@ export function Shell({ section, children }: { section: SectionId; children: Rea
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/6 bg-night-950/75 px-4 py-2.5 backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/6 bg-night-950/75 px-4 pb-2.5 pt-[calc(0.625rem+var(--safe-top))] backdrop-blur-xl lg:hidden">
         <button onClick={() => navigate('home')} aria-label="Inicio">
           <Emblem size={34} />
         </button>

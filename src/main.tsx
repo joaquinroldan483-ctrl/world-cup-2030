@@ -14,3 +14,10 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 );
+
+// Installable app (PWA): offline cache. Only on secure origins; failures are harmless.
+if ('serviceWorker' in navigator && window.isSecureContext && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => undefined);
+  });
+}

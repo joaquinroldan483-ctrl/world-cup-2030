@@ -4,10 +4,10 @@ import { ALL_TEAM_IDS, TEAMS, TEAM_BY_ID } from '../engine';
 import { Flag } from '../components/brand';
 import { Icon } from '../components/Icon';
 import { Button, Card, Chip, cx, EmptyState, IconButton, ProgressBar, SectionHeader, Segmented, Select, TextInput, Toggle } from '../components/ui';
-import { downloadBlob, formatBytes, shareFile, slugify } from '../lib/download';
+import { canShareFiles, downloadBlob, formatBytes, isIOS, keepAwake, shareFile, slugify, unlockAudio } from '../lib/download';
 import { navigate } from '../lib/router';
 import { loadAssets, type MediaAssets } from '../media/canvasKit';
-import { canUseWebCodecs, encodeMp4, EncodeAbort, recordWebm, type EncodeResult } from '../media/video/encode';
+import { canUseWebCodecs, encodeMp4, EncodeAbort, recordRealtime, type EncodeResult } from '../media/video/encode';
 import { MUSIC_STYLES, renderSoundtrack } from '../media/video/music';
 import { buildTimeline, VIDEO_SIZE, type RecapOptions } from '../media/video/scenes';
 import { useDerived, useStore, useTeamName } from '../store/tournament';
@@ -62,9 +62,9 @@ export default function Recap({ param }: { param?: string }) {
           <Icon name="info" /> El torneo todavía no tiene campeón: el vídeo incluirá solo las fases ya jugadas. Completá el Mundial para el recap definitivo.
         </Card>
       )}
-      <div className="grid gap-5 xl:grid-cols-[400px_1fr]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[400px_minmax(0,1fr)]">
         <Options opts={opts} set={set} teamId={teamId} />
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {assets ? <Player opts={effective} assets={assets} /> : <Card className="flex aspect-video items-center justify-center text-white/50">Cargando banderas y tipografías…</Card>}
           {assets && <Exporter opts={effective} assets={assets} filename={`${slugify(opts.mode === 'team' && teamId ? `recorrido-${name(teamId)}` : tName) || 'world-cup-2030'}-${opts.format === '9:16' ? 'vertical' : 'horizontal'}`} />}
           <Card className="p-4 text-xs leading-relaxed text-white/50">
@@ -81,10 +81,11 @@ function Options({ opts, set, teamId }: { opts: RecapOptions; set: (p: Partial<R
   const d = useDerived();
   const [previewing, setPreviewing] = useState(false);
   const previewMusic = async () => {
+    const ctx = unlockAudio();
+    if (!ctx) return;
     setPreviewing(true);
     try {
       const buf = await renderSoundtrack({ style: opts.music, duration: 10, crowd: opts.crowd, cues: [{ time: 0.2, kind: 'boom' }, { time: 6, kind: 'climax' }] });
-      const ctx = new AudioContext();
       const src = ctx.createBufferSource();
       src.buffer = buf;
       src.connect(ctx.destination);
@@ -217,7 +218,8 @@ function Player({ opts, assets }: { opts: RecapOptions; assets: MediaAssets }) {
 
   const play = async () => {
     const from = time >= tl.duration - 0.05 ? 0 : time;
-    if (withMusic) {
+    const ctx = withMusic ? unlockAudio() : null; // must be created inside the tap (iOS)
+    if (withMusic && ctx) {
       const key = `${opts.music}|${opts.crowd}|${tl.duration}|${tl.cues.map((c) => c.time.toFixed(2) + c.kind).join()}`;
       if (musicCache.current?.key !== key) {
         setLoadingMusic(true);
@@ -225,7 +227,6 @@ function Player({ opts, assets }: { opts: RecapOptions; assets: MediaAssets }) {
         musicCache.current = { key, buf };
         setLoadingMusic(false);
       }
-      const ctx = new AudioContext();
       const src = ctx.createBufferSource();
       src.buffer = musicCache.current!.buf;
       src.connect(ctx.destination);
@@ -295,6 +296,8 @@ function Exporter({ opts, assets, filename }: { opts: RecapOptions; assets: Medi
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async () => {
+    const audioCtx = webcodecs ? null : unlockAudio(); // real-time path needs a tap-created context (iOS)
+    const release = await keepAwake();
     abort.current = new AbortController();
     if (state.result) URL.revokeObjectURL(state.result.url);
     setState({ phase: 'working', progress: 0, stage: 'Preparando escenas' });
@@ -310,22 +313,32 @@ function Exporter({ opts, assets, filename }: { opts: RecapOptions; assets: Medi
         render: tl.render,
         audio,
         signal: abort.current.signal,
+        audioCtx,
         onProgress: (progress: number, stage: string) => setState((s) => ({ ...s, progress, stage })),
       };
       let result: EncodeResult;
       try {
-        result = webcodecs ? await encodeMp4(job) : await recordWebm(job);
+        result = webcodecs ? await encodeMp4(job) : await recordRealtime(job);
       } catch (e) {
         if (e instanceof EncodeAbort || !webcodecs) throw e;
         console.warn('WebCodecs falló, usando MediaRecorder', e);
-        result = await recordWebm(job);
+        result = await recordRealtime({ ...job, audioCtx: unlockAudio() });
       }
       setState({ phase: 'done', progress: 1, stage: 'Listo', result: { ...result, url: URL.createObjectURL(result.blob) } });
       toast({ kind: 'success', title: 'Vídeo generado', message: `${result.ext.toUpperCase()} · ${formatBytes(result.blob.size)}` });
     } catch (e) {
       if (e instanceof EncodeAbort) setState({ phase: 'idle', progress: 0, stage: '' });
       else setState({ phase: 'error', progress: 0, stage: '', error: (e as Error).message });
+    } finally {
+      release();
     }
+  };
+  const ios = isIOS();
+  const saveVideo = async () => {
+    const r = state.result!;
+    const file = `${filename}.${r.ext}`;
+    if (canShareFiles(r.blob.type) && (await shareFile(r.blob, file, 'World Cup 2030 — Cinematic Recap'))) return;
+    downloadBlob(r.blob, file);
   };
 
   return (
@@ -334,17 +347,18 @@ function Exporter({ opts, assets, filename }: { opts: RecapOptions; assets: Medi
         <div>
           <div className="font-display text-2xl uppercase">Exportar vídeo</div>
           <div className="text-sm text-white/55">
-            {W}×{H} · 30 fps · {opts.duration}s · {webcodecs ? 'MP4 (H.264)' : 'WebM (tiempo real)'}
+            {W}×{H} · 30 fps · {opts.duration}s · {webcodecs ? 'MP4 (H.264)' : 'grabación en tiempo real'}
           </div>
         </div>
         {state.phase === 'working' ? (
           <Button variant="danger" icon="x" onClick={() => abort.current?.abort()}>Cancelar</Button>
         ) : (
-          <Button variant="primary" size="lg" icon="film" onClick={run}>{state.phase === 'done' ? 'Generar de nuevo' : `Generar vídeo ${webcodecs ? 'MP4' : 'WebM'}`}</Button>
+          <Button variant="primary" size="lg" icon="film" onClick={run}>{state.phase === 'done' ? 'Generar de nuevo' : 'Generar vídeo'}</Button>
         )}
       </div>
       {state.phase === 'working' && (
         <div className="mt-4">
+          {!webcodecs && <p className="mb-2 text-xs text-gold-light">El vídeo se graba en tiempo real ({opts.duration}s): dejá la app abierta y la pantalla encendida.</p>}
           <div className="mb-1.5 flex justify-between text-xs text-white/60">
             <span>{state.stage}</span>
             <span className="tabular">{Math.round(state.progress * 100)}%</span>
@@ -365,7 +379,10 @@ function Exporter({ opts, assets, filename }: { opts: RecapOptions; assets: Medi
               <Chip>{formatBytes(state.result.blob.size)}</Chip>
             </div>
             <p className="text-xs text-white/45">Generado en {state.result.seconds.toFixed(1)} s.</p>
-            <Button variant="gold" className="w-full" icon="download" onClick={() => downloadBlob(state.result!.blob, `${filename}.${state.result!.ext}`)}>Descargar vídeo</Button>
+            <Button variant="gold" className="w-full" icon="download" onClick={ios ? saveVideo : () => downloadBlob(state.result!.blob, `${filename}.${state.result!.ext}`)}>
+              {ios ? 'Guardar en Fotos' : 'Descargar vídeo'}
+            </Button>
+            {ios && <p className="text-[11px] text-white/45">Se abre el menú de compartir: elegí «Guardar vídeo».</p>}
             <Button
               variant="outline"
               className="w-full"

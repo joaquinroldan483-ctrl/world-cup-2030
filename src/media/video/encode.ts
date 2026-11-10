@@ -9,6 +9,8 @@ export interface EncodeJob {
   audio: AudioBuffer | null;
   onProgress: (fraction: number, stage: string) => void;
   signal: AbortSignal;
+  /** AudioContext created in the user's tap (needed on iOS for real-time recording). */
+  audioCtx?: AudioContext | null;
 }
 
 export interface EncodeResult {
@@ -21,7 +23,7 @@ export interface EncodeResult {
 
 export class EncodeAbort extends Error {}
 
-export const canUseWebCodecs = () => typeof window !== 'undefined' && 'VideoEncoder' in window && 'VideoFrame' in window;
+export const canUseWebCodecs = () => typeof window !== 'undefined' && 'VideoEncoder' in window && 'VideoFrame' in window && 'AudioEncoder' in window && 'AudioData' in window;
 
 async function pickVideoCodec(width: number, height: number, fps: number) {
   const bitrate = Math.round(width * height * fps * 0.17); // ≈10.5 Mbps for 1080p30
@@ -70,6 +72,7 @@ export async function encodeMp4(job: EncodeJob): Promise<EncodeResult> {
   const v = await pickVideoCodec(job.width, job.height, job.fps);
   if (!v) throw new Error('Este navegador no puede codificar vídeo con WebCodecs.');
   const a = job.audio ? await pickAudioCodec(job.audio.sampleRate, job.audio.numberOfChannels) : null;
+  if (job.audio && !a) throw new Error('Sin codificador de audio WebCodecs');
 
   const target = new ArrayBufferTarget();
   const muxer = new Muxer({
@@ -145,8 +148,8 @@ export async function encodeMp4(job: EncodeJob): Promise<EncodeResult> {
   };
 }
 
-/** Fallback: real-time capture with MediaRecorder (WebM). */
-export async function recordWebm(job: EncodeJob): Promise<EncodeResult> {
+/** Fallback: real-time capture with MediaRecorder (MP4 on Safari/iPhone, WebM elsewhere). */
+export async function recordRealtime(job: EncodeJob): Promise<EncodeResult> {
   const started = performance.now();
   const canvas = document.createElement('canvas');
   canvas.width = job.width;
@@ -156,15 +159,18 @@ export async function recordWebm(job: EncodeJob): Promise<EncodeResult> {
   let actx: AudioContext | null = null;
   let src: AudioBufferSourceNode | null = null;
   if (job.audio) {
-    actx = new AudioContext({ sampleRate: job.audio.sampleRate });
+    actx = job.audioCtx ?? new AudioContext();
+    if (actx.state === 'suspended') await actx.resume().catch(() => undefined);
     const dest = actx.createMediaStreamDestination();
     src = actx.createBufferSource();
     src.buffer = job.audio;
     src.connect(dest);
     dest.stream.getAudioTracks().forEach((t) => stream.addTrack(t));
   }
-  const mime = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) ?? 'video/webm';
-  const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+  const mime =
+    ['video/mp4;codecs=avc1.42E01F,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
+  const isMp4 = mime.startsWith('video/mp4');
+  const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 10_000_000 } : { videoBitsPerSecond: 10_000_000 });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const done = new Promise<void>((r) => (rec.onstop = () => r()));
@@ -185,14 +191,25 @@ export async function recordWebm(job: EncodeJob): Promise<EncodeResult> {
         return;
       }
       job.render(ctx, t);
-      job.onProgress(t / job.duration, 'Grabando en tiempo real (WebM)');
+      job.onProgress(t / job.duration, 'Grabando en tiempo real: mantené la pantalla encendida');
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   });
   rec.stop();
   await done;
-  src?.stop();
-  await actx?.close();
-  return { blob: new Blob(chunks, { type: 'video/webm' }), ext: 'webm', videoCodec: mime.includes('vp9') ? 'VP9' : 'VP8', audioCodec: job.audio ? 'Opus' : null, seconds: (performance.now() - started) / 1000 };
+  try {
+    src?.stop();
+  } catch {
+    /* already ended */
+  }
+  await actx?.close().catch(() => undefined);
+  const type = isMp4 ? 'video/mp4' : 'video/webm';
+  return {
+    blob: new Blob(chunks, { type }),
+    ext: isMp4 ? 'mp4' : 'webm',
+    videoCodec: mime.includes('avc1') ? 'H.264' : mime.includes('vp9') ? 'VP9' : mime.includes('vp8') ? 'VP8' : isMp4 ? 'MP4' : 'WebM',
+    audioCodec: job.audio ? (mime.includes('mp4a') ? 'AAC' : mime.includes('opus') ? 'Opus' : 'audio') : null,
+    seconds: (performance.now() - started) / 1000,
+  };
 }
