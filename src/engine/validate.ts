@@ -56,6 +56,9 @@ export function parseTournament(input: unknown): Tournament {
                 description: typeof e.description === 'string' ? e.description.slice(0, 200) : undefined,
               }))
           : [],
+        momentum: Array.isArray(r.momentum)
+          ? r.momentum.slice(0, 24).map((x) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(-100, Math.min(100, Math.round(x))) : 0))
+          : null,
         updatedAt: num(r.updatedAt, Date.now()),
       };
     }

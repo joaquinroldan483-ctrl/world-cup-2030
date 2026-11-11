@@ -71,6 +71,11 @@ export interface MatchResult {
   /** Explicit qualified team chosen by the user (knockout). */
   winner?: 'home' | 'away' | null;
   events: MatchEvent[];
+  /**
+   * Momentum: who dominated each 5-minute block (18 blocks for 90', 24 with extra time).
+   * Values from -100 (away team dominates) to +100 (home team dominates).
+   */
+  momentum?: number[] | null;
   updatedAt: number;
 }
 

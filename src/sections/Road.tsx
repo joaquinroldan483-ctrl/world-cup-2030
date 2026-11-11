@@ -4,6 +4,7 @@ import { CONFEDERATIONS, GROUP_LETTERS, STAGE_LABEL, TEAMS, TEAM_BY_ID, buildJou
 import { Crest, Flag, Trophy } from '../components/brand';
 import { Icon } from '../components/Icon';
 import { EventGlyph } from '../components/match';
+import { MomentumBars } from '../components/Momentum';
 import { StandingsTable } from '../components/StandingsTable';
 import { Button, Card, Chip, cx, EmptyState, SectionHeader } from '../components/ui';
 import { navigate } from '../lib/router';
@@ -228,6 +229,11 @@ function StepCard({ s, teamId }: { s: JourneyStep; teamId: string }) {
         )}
       </div>
       {(s.scoreline.includes('pró') || s.scoreline.includes('pen')) && <div className="mt-1.5 text-xs text-gold-light/80">{s.scoreline}</div>}
+      {s.result?.momentum && s.result.momentum.length > 0 && (
+        <div className="mt-2">
+          <MomentumBars result={s.result} values={s.result.momentum} height={44} compact />
+        </div>
+      )}
       {goals.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 border-t border-white/5 pt-2 text-xs">
           {goals.map((e) => (

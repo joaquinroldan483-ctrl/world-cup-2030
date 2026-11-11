@@ -4,6 +4,8 @@ import {
   EVENT_LABEL,
   STAGE_LABEL,
   checkConsistency,
+  fitMomentum,
+  momentumBlocks,
   emptyResult,
   resolveOutcome,
   syncScoreFromEvents,
@@ -19,6 +21,7 @@ import { confirmDialog, toast } from '../store/ui';
 import { Flag } from './brand';
 import { Icon } from './Icon';
 import { EventGlyph, EventList, MatchTimeline } from './match';
+import { MomentumEditor } from './Momentum';
 import { Button, Chip, cx, Modal, Segmented, Stepper, TextInput } from './ui';
 
 export interface EditorTarget {
@@ -32,7 +35,8 @@ export interface EditorTarget {
 const GROUP_TYPES: EventType[] = ['goal', 'penalty_goal', 'penalty_miss', 'own_goal', 'yellow', 'red', 'sub'];
 const KO_TYPES: EventType[] = [...GROUP_TYPES, 'et_goal', 'shootout_scored', 'shootout_missed'];
 
-const normalize = (r: MatchResult, knockout: boolean): MatchResult => {
+const normalize = (r0: MatchResult, knockout: boolean): MatchResult => {
+  const r = r0.momentum?.length ? { ...r0, momentum: fitMomentum(r0.momentum, momentumBlocks(r0, knockout)) } : r0;
   if (!knockout) return { ...r, extraTime: null, penalties: null, winner: null };
   const next = { ...r };
   if (r.regular.home !== r.regular.away) {
@@ -245,6 +249,7 @@ function EditorBody({ target, onClose }: { target: EditorTarget; onClose: () => 
 
       {tab === 'momentum' && (
         <div className="space-y-4">
+          <MomentumEditor result={norm} knockout={knockout} onChange={(momentum) => set({ momentum })} />
           <div className="rounded-2xl border border-white/8 bg-night-950/40 p-4">
             <MatchTimeline result={norm} />
           </div>

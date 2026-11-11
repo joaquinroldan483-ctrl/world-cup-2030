@@ -26,6 +26,10 @@ import {
   shootout,
   simulatePending,
   validateGroups,
+  autoMomentum,
+  fitMomentum,
+  smoothMomentum,
+  dominance,
   type DrawConfig,
   type MatchResult,
   type Tournament,
@@ -370,5 +374,34 @@ describe('statistics & consistency', () => {
     const third = buildJourney(d, d.third!);
     expect(third.knockoutSteps.map((s) => s.stage)).toEqual(['R32', 'R16', 'QF', 'SF', '3P']);
     expect(third.status.kind).toBe('third');
+  });
+});
+
+describe('momentum', () => {
+  it('auto momentum has one bar per 5 minutes and favours the scorer', () => {
+    const r = res('ARG', 'BRA', 1, 0, { events: [{ id: '1', minute: 62, teamId: 'ARG', type: 'goal' }] });
+    const m = autoMomentum(r, false);
+    expect(m).toHaveLength(18);
+    expect(m.every((x) => x >= -100 && x <= 100)).toBe(true);
+    expect(m[12]).toBeGreaterThan(20); // 61'-65' block
+    expect(autoMomentum(r, false)).toEqual(m); // deterministic
+    const et = res('ARG', 'BRA', 1, 1, { extraTime: { home: 1, away: 0 }, events: [{ id: '2', minute: 104, teamId: 'BRA', type: 'et_goal' }] });
+    const m2 = autoMomentum(et, true);
+    expect(m2).toHaveLength(24);
+    expect(m2[20]).toBeLessThan(-20);
+  });
+  it('fits, smooths and measures dominance', () => {
+    expect(fitMomentum([500, -3.4], 4)).toEqual([100, -3, 0, 0]);
+    expect(dominance([60, -20, 0])).toEqual({ home: 75, away: 25 });
+    expect(dominance([])).toEqual({ home: 50, away: 50 });
+    expect(smoothMomentum([0, 100, 0])[1]).toBe(50);
+  });
+  it('simulated matches include a momentum curve of the right length', () => {
+    let t = drawnTournament(41);
+    t = simulatePending(t, { kind: 'all' }, seededRandom(42));
+    const d = deriveTournament(t);
+    for (const m of playedMatches(d)) {
+      expect(m.result.momentum).toHaveLength(m.stage !== 'GROUP' && m.result.extraTime ? 24 : 18);
+    }
   });
 });

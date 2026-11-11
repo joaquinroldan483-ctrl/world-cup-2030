@@ -1,6 +1,7 @@
 import { groupFixtures } from './fixtures';
 import { secureRandom, uid, type RNG } from './random';
 import { deriveTournament } from './tournament';
+import { autoMomentum } from './momentum';
 import type { KnockoutStage, MatchEvent, MatchResult, Score, Tournament } from './types';
 
 /**
@@ -76,7 +77,9 @@ export function simulateMatch(homeId: string, awayId: string, ranking: string[],
       );
     }
   }
-  return { homeId, awayId, regular, extraTime, penalties, winner: null, events, updatedAt: Date.now() };
+  const result: MatchResult = { homeId, awayId, regular, extraTime, penalties, winner: null, events, updatedAt: Date.now() };
+  result.momentum = autoMomentum(result, knockout);
+  return result;
 }
 
 /** Kick-by-kick shoot-out: best of five with early finish, then sudden death. */

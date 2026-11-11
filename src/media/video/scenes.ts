@@ -40,6 +40,8 @@ import {
   type Palette,
 } from '../canvasKit';
 import type { MusicCue, MusicStyle } from './music';
+import { matchColors } from '../../lib/teamColors';
+import { dominance } from '../../engine';
 
 export interface RecapOptions {
   format: '16:9' | '9:16';
@@ -174,6 +176,37 @@ function eventsLine(c: SC, r: MatchResult, teamId?: string): string {
   return parts.join('   ·   ');
 }
 
+
+/** Momentum band: bars above the line for the home team, below for the away team, revealed left to right. */
+function drawMomentum(c: SC, x: number, y: number, w: number, h: number, r: MatchResult, reveal: number) {
+  const values = r.momentum;
+  if (!values?.length || reveal <= 0) return;
+  const { ctx, u } = c;
+  const col = matchColors(r.homeId, r.awayId);
+  const n = values.length;
+  const bw = w / n;
+  const mid = y + h / 2;
+  ctx.save();
+  ctx.globalAlpha *= Math.min(1, reveal * 3);
+  panel(ctx, x - 14 * u, y - 10 * u, w + 28 * u, h + 20 * u, 14 * u, c.pal);
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.fillRect(x, mid - 1 * u, w, 2 * u);
+  const shown = Math.floor(n * reveal);
+  for (let i = 0; i < shown; i++) {
+    const v = values[i];
+    if (!v) continue;
+    const bh = (Math.abs(v) / 100) * (h / 2 - 4 * u);
+    ctx.fillStyle = v > 0 ? col.home : col.away;
+    rr(ctx, x + i * bw + 1.5 * u, v > 0 ? mid - bh : mid, bw - 3 * u, bh, 3 * u);
+    ctx.fill();
+  }
+  const d = dominance(values);
+  text(ctx, `${d.home}%`, x - 24 * u, mid - 6 * u, { size: 24 * u, weight: 800, color: col.home, align: 'right' });
+  text(ctx, `${d.away}%`, x - 24 * u, mid + 26 * u, { size: 24 * u, weight: 800, color: col.away, align: 'right' });
+  text(ctx, 'MOMENTUM', x + w + 24 * u, mid + 8 * u, { size: 20 * u, weight: 800, spacing: 4 * u, color: c.pal.muted });
+  ctx.restore();
+}
+
 /** Big versus card with waving flags, animated score reveal and the goal story. */
 function versus(c: SC, p: number, t: number, homeId: string, awayId: string, r: MatchResult | undefined, winnerId: string | undefined, stage: string, big = false) {
   const { ctx, W, H, u, A, name, portrait } = c;
@@ -219,7 +252,7 @@ function versus(c: SC, p: number, t: number, homeId: string, awayId: string, r: 
     if (ev > 0) {
       const lh = eventsLine(c, r, homeId);
       const la = eventsLine(c, r, awayId);
-      const ly = portrait ? cy + 220 * u + fh + 60 * u : H - 150 * u;
+      const ly = portrait ? cy + 220 * u + fh + 60 * u : r.momentum?.length ? H - 118 * u : H - 150 * u;
       if (portrait) {
         if (lh) text(ctx, lh, W / 2, cy - fh - 260 * u, { size: 28 * u, weight: 700, color: c.pal.muted, align: 'center', maxWidth: W - 80 * u, alpha: ev });
         if (la) text(ctx, la, W / 2, ly, { size: 28 * u, weight: 700, color: c.pal.muted, align: 'center', maxWidth: W - 80 * u, alpha: ev });
@@ -228,10 +261,15 @@ function versus(c: SC, p: number, t: number, homeId: string, awayId: string, r: 
         if (la) text(ctx, la, W / 2 + gap + fw / 2, ly, { size: 28 * u, weight: 700, color: c.pal.muted, align: 'center', maxWidth: fw + 120 * u, alpha: ev });
       }
     }
+    if (r.momentum?.length) {
+      const mw = (portrait ? 760 : 900) * u;
+      const my = portrait ? H - 330 * u : cy + fh / 2 + 82 * u;
+      drawMomentum(c, (W - mw) / 2, my, mw, (portrait ? 120 : 76) * u, r, ease.outCubic(seg(p, 0.5, 0.75)));
+    }
     if (winnerId) {
       const wp = seg(p, 0.7, 0.85);
       if (wp > 0) {
-        const wy = portrait ? H - 130 * u : H - 70 * u;
+        const wy = portrait ? H - 130 * u : r.momentum?.length ? H - 42 * u : H - 70 * u;
         const label = stage === 'F' ? `${name(winnerId).toUpperCase()} · CAMPEÓN DEL MUNDO` : stage === '3P' ? `${name(winnerId).toUpperCase()} · TERCER PUESTO` : `${name(winnerId).toUpperCase()} AVANZA`;
         text(ctx, label, W / 2, wy, { size: 40 * u, weight: 800, spacing: 8 * u, color: '#fff', align: 'center', alpha: ease.outCubic(wp), maxWidth: W - 100 * u, shadow: true });
       }
