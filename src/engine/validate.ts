@@ -1,6 +1,7 @@
 import { DEFAULT_DRAW_CONFIG } from './draw';
 import { TEAM_BY_ID, DEFAULT_RANKING } from './teams';
-import { createTournament } from './tournament';
+import { createTournament, migrateTournament } from './tournament';
+import { EDITIONS } from './editions';
 import { CONFEDERATIONS, DEFAULT_TIEBREAKERS, GROUP_COUNT, TEAMS_PER_GROUP, type MatchResult, type TiebreakCriterion, type Tournament } from './types';
 import { EVENT_TYPES } from './results';
 
@@ -15,7 +16,8 @@ export function parseTournament(input: unknown): Tournament {
   const raw = isObj(input) && isObj(input.tournament) ? input.tournament : input;
   if (!isObj(raw)) throw new ImportError('El archivo no contiene un torneo válido.');
   if (raw.schema !== 1) throw new ImportError('Versión de archivo no compatible.');
-  const base = createTournament(typeof raw.name === 'string' ? raw.name.slice(0, 80) : 'Torneo importado');
+  const edition = typeof raw.edition === 'string' && raw.edition in EDITIONS ? (raw.edition as Tournament['edition']) : '2030';
+  const base = createTournament(typeof raw.name === 'string' ? raw.name.slice(0, 80) : 'Torneo importado', edition);
 
   let groups: string[][] | null = null;
   if (Array.isArray(raw.groups)) {
@@ -28,6 +30,8 @@ export function parseTournament(input: unknown): Tournament {
       });
     });
     if (new Set(groups.flat()).size !== 64) throw new ImportError('Hay selecciones repetidas en los grupos.');
+    if (Array.isArray(raw.participants) && !groups.flat().every((id) => (raw.participants as string[]).includes(id)))
+      throw new ImportError('Los grupos no coinciden con la lista de participantes.');
   }
 
   const results: Record<string, MatchResult> = {};
@@ -64,6 +68,7 @@ export function parseTournament(input: unknown): Tournament {
     }
   }
 
+  const participants = Array.isArray(raw.participants) ? (raw.participants as string[]) : groups ? groups.flat() : base.participants;
   const ranking = Array.isArray(raw.ranking) && raw.ranking.length === 64 && new Set(raw.ranking).size === 64 && raw.ranking.every((id) => TEAM_BY_ID[id as string])
     ? (raw.ranking as string[])
     : DEFAULT_RANKING.slice();
@@ -76,8 +81,17 @@ export function parseTournament(input: unknown): Tournament {
   const teamNames: Record<string, string> = {};
   if (isObj(raw.teamNames)) for (const [k, v] of Object.entries(raw.teamNames)) if (TEAM_BY_ID[k] && typeof v === 'string' && v.trim()) teamNames[k] = v.slice(0, 40);
 
-  return {
+  const groupOverrides: Record<number, string[]> = {};
+  if (isObj(raw.groupOverrides) && groups)
+    for (const [k, v] of Object.entries(raw.groupOverrides)) {
+      const gi = Number(k);
+      if (Array.isArray(v) && groups[gi] && v.length === 4 && groups[gi].every((id) => v.includes(id))) groupOverrides[gi] = v as string[];
+    }
+  return migrateTournament({
     ...base,
+    participants,
+    hosts: Array.isArray(raw.hosts) ? (raw.hosts as string[]).filter((h) => participants.includes(h)) : base.hosts,
+    groupOverrides,
     teamNames,
     ranking,
     tiebreakers,
@@ -94,5 +108,5 @@ export function parseTournament(input: unknown): Tournament {
     results: groups ? results : {},
     seed: typeof raw.seed === 'string' ? raw.seed : base.seed,
     kickoff: typeof raw.kickoff === 'string' && !Number.isNaN(Date.parse(raw.kickoff)) ? raw.kickoff : base.kickoff,
-  };
+  });
 }

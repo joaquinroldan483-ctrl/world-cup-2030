@@ -103,7 +103,7 @@ function GroupCard({ g, onOpen }: { g: GroupView; onOpen: (f: GroupFixture) => v
           </span>
         </button>
         <div className="flex items-center gap-2">
-          {g.table.complete ? <Chip tone="emerald">Completo</Chip> : <Chip>En juego</Chip>}
+          {g.table.manual ? <Chip tone="gold">Orden manual</Chip> : g.table.complete ? <Chip tone="emerald">Completo</Chip> : <Chip>En juego</Chip>}
           <IconButton icon="chevronRight" label="Abrir grupo" onClick={() => navigate('groups', g.letter)} />
         </div>
       </div>
@@ -184,7 +184,8 @@ function GroupDetail({ g, onOpen, editor, setEditor }: { g: GroupView; onOpen: (
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded bg-emerald" /> Clasifica</span>
             </div>
           </div>
-          <StandingsTable rows={g.table.rows} complete={g.table.complete} />
+          <StandingsTable rows={g.table.rows} complete={g.table.complete || g.table.manual} />
+          <ManualQualifiers g={g} />
         </Card>
         <div className="space-y-4">
           {[1, 2, 3].map((md) => (
@@ -217,6 +218,69 @@ function MatchdayView({ groups, onOpen }: { groups: GroupView[]; onOpen: (f: Gro
             <FixtureRow f={f} onOpen={onOpen} />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Manually set the final order of a group (decides who goes to the round of 32). */
+function ManualQualifiers({ g }: { g: GroupView }) {
+  const commit = useStore((s) => s.commit);
+  const name = useTeamName();
+  const [order, setOrder] = useState<string[] | null>(null);
+  const move = (i: number, dir: -1 | 1) =>
+    setOrder((o) => {
+      if (!o) return o;
+      const n = o.slice();
+      const j = i + dir;
+      if (j < 0 || j >= n.length) return o;
+      [n[i], n[j]] = [n[j], n[i]];
+      return n;
+    });
+  const save = async (next: string[] | null) => {
+    const ok = await commit(
+      (t) => {
+        const groupOverrides = { ...t.groupOverrides };
+        if (next) groupOverrides[g.index] = next;
+        else delete groupOverrides[g.index];
+        return { ...t, groupOverrides };
+      },
+      { label: next ? `Clasificados del grupo ${g.letter}` : `Orden automático del grupo ${g.letter}` },
+    );
+    if (ok) setOrder(null);
+  };
+  if (!order)
+    return (
+      <div className="mt-4 flex flex-col gap-2 border-t border-white/8 pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs text-white/50">
+          {g.table.manual
+            ? 'Orden fijado a mano: los dos primeros pasan a dieciseisavos aunque falten partidos o los resultados digan otra cosa.'
+            : 'Podés fijar a mano quiénes se clasifican y en qué orden.'}
+        </p>
+        <div className="flex shrink-0 gap-2">
+          {g.table.manual && <Button size="sm" variant="ghost" icon="undo" onClick={() => save(null)}>Volver al cálculo</Button>}
+          <Button size="sm" variant="outline" icon="swap" onClick={() => setOrder(g.table.rows.map((r) => r.teamId))}>Cambiar clasificados</Button>
+        </div>
+      </div>
+    );
+  return (
+    <div className="mt-4 rounded-2xl border border-gold/30 bg-gold/6 p-3">
+      <div className="mb-2 font-cond text-sm font-bold uppercase tracking-wide text-gold-light">Orden final del grupo {g.letter}</div>
+      <ol className="space-y-1.5">
+        {order.map((id, i) => (
+          <li key={id} className={cx('flex items-center gap-2 rounded-xl border px-2.5 py-1.5', i < 2 ? 'border-emerald/40 bg-emerald/10' : 'border-white/8 bg-white/3')}>
+            <span className={cx('flex h-6 w-6 items-center justify-center rounded-md font-cond text-xs font-bold', i < 2 ? 'bg-emerald text-white' : 'bg-white/8 text-white/50')}>{i + 1}</span>
+            <Flag id={id} className="w-6" />
+            <span className="min-w-0 flex-1 truncate text-sm">{name(id)}</span>
+            <span className="hidden text-[10px] uppercase text-white/40 sm:inline">{i < 2 ? 'Clasifica' : 'Eliminado'}</span>
+            <IconButton icon="chevronDown" className="h-8 w-8 rotate-180" label={`Subir a ${name(id)}`} disabled={i === 0} onClick={() => move(i, -1)} />
+            <IconButton icon="chevronDown" className="h-8 w-8" label={`Bajar a ${name(id)}`} disabled={i === order.length - 1} onClick={() => move(i, 1)} />
+          </li>
+        ))}
+      </ol>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setOrder(null)}>Cancelar</Button>
+        <Button size="sm" variant="gold" icon="check" onClick={() => save(order)}>Fijar clasificados</Button>
       </div>
     </div>
   );

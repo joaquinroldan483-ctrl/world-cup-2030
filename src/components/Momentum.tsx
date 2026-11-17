@@ -12,7 +12,8 @@ import {
   type MatchResult,
 } from '../engine';
 import { matchColors } from '../lib/teamColors';
-import { useTeamName } from '../store/tournament';
+import { useStore, useTeamName } from '../store/tournament';
+import { Segmented } from './ui';
 import { Flag } from './brand';
 import { Icon } from './Icon';
 import { EventGlyph } from './match';
@@ -26,11 +27,77 @@ interface ChartProps {
   selected?: number | null;
   /** Painting handlers (editor only). */
   onPaint?: (index: number, value: number, start: boolean) => void;
+  /** Force a view; by default the user's preference. */
+  view?: 'bars' | 'chart';
+}
+
+export type MomentumView = 'bars' | 'chart';
+
+export function useMomentumView(): MomentumView {
+  return useStore((s) => s.prefs.momentumView ?? 'bars');
+}
+
+/** Bars / chart switch (stored as a preference, also used by the video). */
+export function MomentumViewToggle() {
+  const view = useMomentumView();
+  const setPrefs = useStore((s) => s.setPrefs);
+  return <Segmented value={view} onChange={(v: MomentumView) => setPrefs({ momentumView: v })} options={[{ value: 'bars', label: 'Barras' }, { value: 'chart', label: 'Gráfico' }]} />;
+}
+
+/** Catmull-Rom → cubic Bézier path through the points. */
+function smoothPath(pts: [number, number][]): string {
+  if (!pts.length) return '';
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] ?? pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] ?? p2;
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0].toFixed(2)},${c1[1].toFixed(2)} ${c2[0].toFixed(2)},${c2[1].toFixed(2)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+
+/** Area chart: the curve above zero is shaded in the home colour, below in the away colour. */
+function MomentumArea({ values, colors, id }: { values: number[]; colors: { home: string; away: string }; id: string }) {
+  const n = values.length;
+  const W = n * 10;
+  const pts: [number, number][] = [[0, 0], ...values.map((v, i) => [i * 10 + 5, -v * 0.92] as [number, number]), [W, 0]];
+  const line = smoothPath(pts);
+  const area = `${line} L${W},0 L0,0 Z`;
+  return (
+    <svg className="absolute inset-0 h-full w-full" viewBox={`0 -100 ${W} 200`} preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <clipPath id={`${id}-top`}><rect x="0" y="-100" width={W} height="100" /></clipPath>
+        <clipPath id={`${id}-bot`}><rect x="0" y="0" width={W} height="100" /></clipPath>
+        <linearGradient id={`${id}-gh`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={colors.home} stopOpacity="0.95" />
+          <stop offset="1" stopColor={colors.home} stopOpacity="0.25" />
+        </linearGradient>
+        <linearGradient id={`${id}-ga`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={colors.away} stopOpacity="0.25" />
+          <stop offset="1" stopColor={colors.away} stopOpacity="0.95" />
+        </linearGradient>
+      </defs>
+      {[-50, 50].map((y) => (
+        <line key={y} x1="0" x2={W} y1={y} y2={y} stroke="rgba(255,255,255,0.07)" strokeWidth="1" vectorEffect="non-scaling-stroke" strokeDasharray="3 4" />
+      ))}
+      <path d={area} fill={`url(#${id}-gh)`} clipPath={`url(#${id}-top)`} />
+      <path d={area} fill={`url(#${id}-ga)`} clipPath={`url(#${id}-bot)`} />
+      <path d={line} fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
 }
 
 /** Momentum bars: above the line the home team dominates, below the away team. */
-export function MomentumBars({ result, values, height = 150, compact, selected, onPaint }: ChartProps) {
+export function MomentumBars({ result, values, height = 150, compact, selected, onPaint, view: forced }: ChartProps) {
   const name = useTeamName();
+  const pref = useMomentumView();
+  const view = forced ?? pref;
+  const [hover, setHover] = useState<number | null>(null);
+  const uid = `m${result.homeId}${result.awayId}${values.length}${compact ? 'c' : ''}`;
   const ref = useRef<HTMLDivElement>(null);
   const painting = useRef(false);
   const colors = matchColors(result.homeId, result.awayId);
@@ -67,7 +134,14 @@ export function MomentumBars({ result, values, height = 150, compact, selected, 
           (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
           handle(e, true);
         }}
-        onPointerMove={(e) => painting.current && handle(e, false)}
+        onPointerMove={(e) => {
+          if (painting.current) handle(e, false);
+          else if (ref.current && e.pointerType === 'mouse') {
+            const r = ref.current.getBoundingClientRect();
+            setHover(Math.max(0, Math.min(n - 1, Math.floor(((e.clientX - r.left) / r.width) * n))));
+          }
+        }}
+        onPointerLeave={() => setHover(null)}
         onPointerUp={() => (painting.current = false)}
         onPointerCancel={() => (painting.current = false)}
       >
@@ -75,7 +149,14 @@ export function MomentumBars({ result, values, height = 150, compact, selected, 
         <div className="pointer-events-none absolute inset-y-1 w-px bg-white/15" style={{ left: `${(9 / n) * 100}%` }} />
         {n > 18 && <div className="pointer-events-none absolute inset-y-0 right-0 rounded-r-xl bg-gold/8" style={{ width: `${(6 / n) * 100}%` }} />}
         <div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-white/25" />
-        <div className="pointer-events-none absolute inset-0 flex gap-[2px] px-[2px]">
+        {view === 'chart' && <MomentumArea values={values} colors={colors} id={uid} />}
+        {view === 'chart' && selected !== null && selected !== undefined && <div className="pointer-events-none absolute inset-y-0 bg-white/10" style={{ left: `${(selected / n) * 100}%`, width: `${100 / n}%` }} />}
+        {!compact && hover !== null && !painting.current && (
+          <div className="pointer-events-none absolute -top-2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-lg border border-white/10 bg-night-900 px-2 py-1 text-[11px] text-white/85 shadow-lg" style={{ left: `${((hover + 0.5) / n) * 100}%` }}>
+            {blockLabel(hover)} · {values[hover] === 0 ? 'parejo' : `${name(values[hover] > 0 ? result.homeId : result.awayId)} ${Math.abs(values[hover])}`}
+          </div>
+        )}
+        <div className={cx('pointer-events-none absolute inset-0 flex gap-[2px] px-[2px]', view === 'chart' && 'hidden')}>
           {values.map((v, i) => (
             <div key={i} className={cx('relative flex-1', selected === i && 'rounded bg-white/8')} title={`${blockLabel(i)} · ${v === 0 ? 'parejo' : `${name(v > 0 ? result.homeId : result.awayId)} ${Math.abs(v)}`}`}>
               {v > 0 && <div className="absolute inset-x-0 bottom-1/2 rounded-t-[3px] transition-[height] duration-150" style={{ height: `${(v / 100) * 48}%`, background: colors.home }} />}
@@ -160,8 +241,11 @@ export function MomentumEditor({ result, knockout, onChange }: { result: MatchRe
   return (
     <div className="space-y-3 rounded-2xl border border-white/10 bg-white/4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-cond text-lg font-bold uppercase tracking-wide">Barras de dominio</div>
-        <span className="text-[11px] text-white/45">Arrastrá sobre el gráfico para dibujar</span>
+        <div>
+          <div className="font-cond text-lg font-bold uppercase tracking-wide">Momentum · dominio</div>
+          <span className="text-[11px] text-white/45">Arrastrá sobre el gráfico para dibujar</span>
+        </div>
+        <MomentumViewToggle />
       </div>
       <DominanceBar result={result} values={values} />
       <MomentumBars

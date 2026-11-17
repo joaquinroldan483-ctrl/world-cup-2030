@@ -171,6 +171,14 @@ export interface DrawResult {
 export interface Tournament {
   id: string;
   name: string;
+  /** World Cup edition (theme, hosts, default dates). */
+  edition: import('./editions').EditionId;
+  /** The 64 participating team ids. */
+  participants: string[];
+  /** Host team ids (seeded as heads of groups A, B, C…). */
+  hosts: string[];
+  /** Manual final order of a group (group index → 4 team ids); overrides the computed standings. */
+  groupOverrides: Record<number, string[]>;
   createdAt: number;
   updatedAt: number;
   schema: 1;

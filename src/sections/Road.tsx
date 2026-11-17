@@ -1,10 +1,11 @@
 import { motion } from 'motion/react';
 import { useMemo, useState } from 'react';
-import { CONFEDERATIONS, GROUP_LETTERS, STAGE_LABEL, TEAMS, TEAM_BY_ID, buildJourney, formatMinute, isGoal, sortEvents, type Confederation, type JourneyStep } from '../engine';
+import { CONFEDERATIONS, GROUP_LETTERS, STAGE_LABEL, TEAM_BY_ID, buildJourney, formatMinute, isGoal, sortEvents, type Confederation, type JourneyStep } from '../engine';
 import { Crest, Flag, Trophy } from '../components/brand';
 import { Icon } from '../components/Icon';
 import { EventGlyph } from '../components/match';
-import { MomentumBars } from '../components/Momentum';
+import { MomentumBars, MomentumViewToggle } from '../components/Momentum';
+import { EDITIONS } from '../engine';
 import { StandingsTable } from '../components/StandingsTable';
 import { Button, Card, Chip, cx, EmptyState, SectionHeader } from '../components/ui';
 import { navigate } from '../lib/router';
@@ -21,7 +22,7 @@ function Picker() {
   const name = useTeamName();
   const [q, setQ] = useState('');
   const [conf, setConf] = useState<Confederation | 'ALL'>('ALL');
-  const list = TEAMS.filter((t) => (conf === 'ALL' || t.confederation === conf) && (!q || name(t.id).toLowerCase().includes(q.toLowerCase())));
+  const list = d.t.participants.map((id) => TEAM_BY_ID[id]).filter((t) => (conf === 'ALL' || t.confederation === conf) && (!q || name(t.id).toLowerCase().includes(q.toLowerCase())));
   return (
     <div>
       <SectionHeader
@@ -151,7 +152,7 @@ function JourneyView({ teamId }: { teamId: string }) {
               </RoadNode>
             ))}
             {j.status.kind === 'champion' && (
-              <RoadNode icon="star" title="Campeón del mundo 2030" subtitle={`${j.wins} victorias · ${j.goalsFor} goles a favor`} tone="gold" delay={0.8}>
+              <RoadNode icon="star" title={`Campeón del mundo ${EDITIONS[d.t.edition].year}`} subtitle={`${j.wins} victorias · ${j.goalsFor} goles a favor`} tone="gold" delay={0.8}>
                 <div className="flex items-center gap-4 rounded-2xl border border-gold/40 bg-gold/10 p-4">
                   <Trophy className="h-24 w-16" />
                   <div className="font-display text-3xl uppercase text-gold-gradient">{name(teamId)} campeón</div>
@@ -181,6 +182,10 @@ function JourneyView({ teamId }: { teamId: string }) {
               )}
             </Card>
             <Card className="p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="label">Vista del momentum</div>
+                <MomentumViewToggle />
+              </div>
               <div className="label mb-3">Compartir el recorrido</div>
               <div className="flex flex-col gap-2">
                 <Button variant="gold" icon="poster" onClick={() => navigate('poster', teamId)}>Crear póster legendario</Button>

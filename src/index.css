@@ -93,19 +93,19 @@ main { overflow-x: clip; }
     -webkit-backdrop-filter: blur(18px);
   }
   .text-gold-gradient {
-    background: linear-gradient(180deg, #fff3c4 0%, #f2cf6b 38%, #c8951f 70%, #f6d77f 100%);
+    background: var(--gold-grad, linear-gradient(180deg, #fff3c4 0%, #f2cf6b 38%, #c8951f 70%, #f6d77f 100%));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
   .text-hosts-gradient {
-    background: linear-gradient(100deg, #ff3b47 0%, #ffc400 30%, #f6d77f 50%, #12b26e 72%, #0b8a4f 100%);
+    background: var(--hero-grad, linear-gradient(100deg, #ff3b47 0%, #ffc400 30%, #f6d77f 50%, #12b26e 72%, #0b8a4f 100%));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
   .host-stripe {
-    background: linear-gradient(90deg, #c60b1e 0 22%, #ffc400 22% 33%, #c60b1e 33% 44%, #046a38 44% 55%, #da291c 55% 66%, #c1272d 66% 83%, #006233 83% 100%);
+    background: var(--stripe, linear-gradient(90deg, #c60b1e 0 22%, #ffc400 22% 33%, #c60b1e 33% 44%, #046a38 44% 55%, #da291c 55% 66%, #c1272d 66% 83%, #006233 83% 100%));
   }
   .shine {
     background-image: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / 0.22) 50%, transparent 70%);
@@ -139,3 +139,19 @@ input[type='number'] { -moz-appearance: textfield; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+
+/* Edition motifs (drawn by StadiumBackdrop) */
+.motif-desert {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='84' height='84' viewBox='0 0 84 84'%3E%3Cg fill='none' stroke='%23d9a54a' stroke-width='1.1'%3E%3Cpath d='M42 12l8.5 21.5L72 42l-21.5 8.5L42 72l-8.5-21.5L12 42l21.5-8.5z'/%3E%3Cpath d='M42 22l6 14 14 6-14 6-6 14-6-14-14-6 14-6z'/%3E%3Ccircle cx='42' cy='42' r='5'/%3E%3Cpath d='M0 0l12 12M84 0L72 12M0 84l12-12M84 84L72 72'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 84px 84px;
+}
+.motif-future {
+  background-image:
+    linear-gradient(rgb(94 240 255 / 0.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(224 33 138 / 0.10) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}

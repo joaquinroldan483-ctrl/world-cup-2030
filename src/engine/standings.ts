@@ -22,6 +22,7 @@ export interface StandingRow {
   tiedOnPoints: boolean;
 }
 
+
 interface PlayedMatch {
   homeId: string;
   awayId: string;
@@ -147,6 +148,8 @@ export interface GroupTable {
   fixtures: GroupFixture[];
   played: number;
   complete: boolean;
+  /** The final order was set manually by the user (qualifiers are decided). */
+  manual: boolean;
 }
 
 /** Computes the standings of a group. Results whose participants do not match the fixture are ignored. */
@@ -156,6 +159,7 @@ export function computeGroupTable(
   results: Record<string, MatchResult>,
   criteria: TiebreakCriterion[],
   seed: string,
+  override?: string[],
 ): GroupTable {
   const fixtures = groupFixtures(groupIndex, teamIds);
   const rows = new Map(teamIds.map((id) => [id, blankRow(id)]));
@@ -173,7 +177,8 @@ export function computeGroupTable(
       if (e.type === 'red') row.fairPlay -= 4;
     }
   }
-  const order = orderTeams(teamIds, rows, played, criteria, seed);
+  const manual = !!override && override.length === teamIds.length && teamIds.every((id) => override.includes(id));
+  const order = manual ? override!.slice() : orderTeams(teamIds, rows, played, criteria, seed);
   const sorted = order.map((id, i) => ({ ...rows.get(id)!, position: i + 1 }));
   for (let i = 0; i < sorted.length; i++) {
     const prev = sorted[i - 1];
@@ -184,10 +189,10 @@ export function computeGroupTable(
   const pending = fixtures.filter((f) => !played.some((p) => p.homeId === f.homeId && p.awayId === f.awayId));
   const status = clinchStatus(teamIds, rows, pending);
   for (const r of sorted) {
-    if (complete) r.status = r.position <= 2 ? 'qualified' : 'eliminated';
+    if (complete || manual) r.status = r.position <= 2 ? 'qualified' : 'eliminated';
     else r.status = status[r.teamId];
   }
-  return { rows: sorted, fixtures, played: played.length, complete };
+  return { rows: sorted, fixtures, played: played.length, complete, manual };
 }
 
 /**

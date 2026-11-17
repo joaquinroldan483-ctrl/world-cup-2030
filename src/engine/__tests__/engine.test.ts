@@ -27,6 +27,11 @@ import {
   simulatePending,
   validateGroups,
   autoMomentum,
+  replaceParticipant,
+  migrateTournament,
+  parseTournament,
+  EDITIONS,
+  CATALOG,
   fitMomentum,
   smoothMomentum,
   dominance,
@@ -104,8 +109,9 @@ describe('draw', () => {
   });
   it('pots draw places one team per pot in each group and seeds hosts', () => {
     const cfg = { ...DEFAULT_DRAW_CONFIG, mode: 'pots' as const, hostsSeeded: true };
-    const pots = buildPots(DEFAULT_RANKING, true);
-    const d = performDraw(cfg, { rng: seededRandom(3), ranking: DEFAULT_RANKING, teamIds: ALL_TEAM_IDS });
+    const hosts = ['ESP', 'POR', 'MAR'];
+    const pots = buildPots(DEFAULT_RANKING, true, hosts);
+    const d = performDraw(cfg, { rng: seededRandom(3), ranking: DEFAULT_RANKING, teamIds: ALL_TEAM_IDS, hosts });
     expect(d.groups[0][0]).toBe('ESP');
     expect(d.groups[1][0]).toBe('POR');
     expect(d.groups[2][0]).toBe('MAR');
@@ -403,5 +409,68 @@ describe('momentum', () => {
     for (const m of playedMatches(d)) {
       expect(m.result.momentum).toHaveLength(m.stage !== 'GROUP' && m.result.extraTime ? 24 : 18);
     }
+  });
+});
+
+describe('editions, participants and manual qualifiers', () => {
+  it('creates tournaments for every edition with valid participants and hosts', () => {
+    for (const ed of ['2030', '2034', '2038'] as const) {
+      const t = createTournament(undefined, ed);
+      expect(t.edition).toBe(ed);
+      expect(t.participants).toHaveLength(64);
+      expect(new Set(t.ranking)).toEqual(new Set(t.participants));
+      expect(t.hosts).toEqual(EDITIONS[ed].defaultHosts);
+      expect(t.kickoff.startsWith(ed)).toBe(true);
+    }
+    expect(new Set(CATALOG.map((x) => x.id)).size).toBe(CATALOG.length);
+  });
+  it('migrates tournaments saved before editions existed', () => {
+    const old = createTournament() as Partial<Tournament>;
+    delete old.edition;
+    delete old.participants;
+    delete old.hosts;
+    delete old.groupOverrides;
+    const m = migrateTournament(old as Tournament);
+    expect(m.edition).toBe('2030');
+    expect(m.participants).toHaveLength(64);
+    expect(m.hosts).toEqual(['ESP', 'POR', 'MAR']);
+    expect(m.groupOverrides).toEqual({});
+  });
+  it('replaces a participant everywhere and drops only its results', () => {
+    let t = drawnTournament(51);
+    t = simulatePending(t, { kind: 'groups' }, seededRandom(52));
+    const before = Object.keys(t.results).length;
+    const r = replaceParticipant(t, 'ARG', 'PER');
+    expect(r.participants).toContain('PER');
+    expect(r.participants).not.toContain('ARG');
+    expect(r.ranking).toContain('PER');
+    expect(r.groups!.flat()).toContain('PER');
+    expect(Object.values(r.results).some((x) => x.homeId === 'ARG' || x.awayId === 'ARG')).toBe(false);
+    expect(Object.keys(r.results)).toHaveLength(before - 3);
+    expect(() => replaceParticipant(r, 'BRA', 'PER')).toThrow();
+    // draw works with the new participant list and custom hosts
+    const d = performDraw({ ...DEFAULT_DRAW_CONFIG, mode: 'pots' }, { rng: seededRandom(3), ranking: r.ranking, teamIds: r.participants, hosts: ['KSA'] });
+    expect(new Set(d.groups.flat())).toEqual(new Set(r.participants));
+    expect(d.groups[0][0]).toBe('KSA');
+  });
+  it('a manual group order decides the qualifiers and propagates to the bracket', () => {
+    const t = drawnTournament(61);
+    const g0 = t.groups![0];
+    const order = [g0[3], g0[2], g0[1], g0[0]];
+    const d = deriveTournament({ ...t, groupOverrides: { 0: order } });
+    expect(d.groups[0].table.manual).toBe(true);
+    expect(d.groups[0].table.rows.map((r) => r.teamId)).toEqual(order);
+    expect(d.ko['R32-1'].homeId).toBe(order[0]); // 1A
+    expect(d.ko['R32-9'].awayId).toBe(order[1]); // 2A
+    expect(d.qualified).toEqual([order[0], order[1]]);
+  });
+  it('import keeps edition, participants, hosts and overrides', () => {
+    const t = replaceParticipant({ ...drawnTournament(71), edition: '2038', hosts: ['USA'] }, 'NZL', 'SCO');
+    const withOverride = { ...t, groupOverrides: { 1: t.groups![1].slice().reverse() } };
+    const p = parseTournament(JSON.parse(JSON.stringify(withOverride)));
+    expect(p.edition).toBe('2038');
+    expect(p.participants).toContain('SCO');
+    expect(p.hosts).toEqual(['USA']);
+    expect(p.groupOverrides[1]).toEqual(t.groups![1].slice().reverse());
   });
 });

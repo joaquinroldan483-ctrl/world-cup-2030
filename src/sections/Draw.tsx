@@ -1,10 +1,8 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ALL_TEAM_IDS,
   CONFEDERATIONS,
   GROUP_LETTERS,
-  TEAMS,
   TEAM_BY_ID,
   buildPots,
   checkConfedFeasibility,
@@ -48,7 +46,7 @@ export default function Draw() {
       return;
     }
     try {
-      const r = performDraw(cfg, { ranking: t.ranking, teamIds: ALL_TEAM_IDS });
+      const r = performDraw(cfg, { ranking: t.ranking, teamIds: t.participants, hosts: t.hosts });
       setPending(r);
       setPhase('ceremony');
       sound.whistle();
@@ -122,8 +120,10 @@ function Setup({ onStart, onCancel }: { onStart: (cfg: DrawConfig) => void; onCa
   const cfg = t.drawConfig;
   const set = (patch: Partial<DrawConfig>) => void commit((x) => ({ ...x, drawConfig: { ...x.drawConfig, ...patch } }), { label: 'Configurar sorteo' });
   const usesRules = cfg.mode === 'confederation' || (cfg.mode === 'pots' && cfg.potsUseConfedRules) || (cfg.mode === 'manual' && cfg.manualUseConfedRules);
-  const feas = checkConfedFeasibility(ALL_TEAM_IDS, cfg.confedMax);
-  const pots = useMemo(() => buildPots(t.ranking, cfg.hostsSeeded), [t.ranking, cfg.hostsSeeded]);
+  const feas = checkConfedFeasibility(t.participants, cfg.confedMax);
+  const teams = t.participants.map((id) => TEAM_BY_ID[id]);
+  const name = useTeamName();
+  const pots = useMemo(() => buildPots(t.ranking, cfg.hostsSeeded, t.hosts), [t.ranking, cfg.hostsSeeded, t.hosts]);
 
   return (
     <div className="space-y-6">
@@ -151,7 +151,7 @@ function Setup({ onStart, onCancel }: { onStart: (cfg: DrawConfig) => void; onCa
         <Card className="p-5">
           <div className="label mb-2">Opciones</div>
           {cfg.mode !== 'manual' && (
-            <Toggle checked={cfg.hostsSeeded} onChange={(v) => set({ hostsSeeded: v })} label="Anfitriones como cabezas de serie" description="España en A1, Portugal en B1 y Marruecos en C1." />
+            <Toggle checked={cfg.hostsSeeded} onChange={(v) => set({ hostsSeeded: v })} label="Anfitriones como cabezas de serie" description={t.hosts.length ? t.hosts.map((h, i) => `${name(h)} en ${GROUP_LETTERS[i]}1`).join(', ') + '.' : 'Esta edición todavía no tiene anfitriones: elegilos en Settings.'} />
           )}
           {cfg.mode === 'pots' && (
             <Toggle checked={cfg.potsUseConfedRules} onChange={(v) => set({ potsUseConfedRules: v })} label="Aplicar también restricciones por confederación" description="Además de un equipo por bombo en cada grupo." />
@@ -170,7 +170,7 @@ function Setup({ onStart, onCancel }: { onStart: (cfg: DrawConfig) => void; onCa
               <p className="mb-3 text-xs text-white/45">Reglas personalizadas (no reglamento oficial). Se validan antes de confirmar.</p>
               <div className="space-y-2">
                 {CONFEDERATIONS.map((c) => {
-                  const n = TEAMS.filter((x) => x.confederation === c).length;
+                  const n = teams.filter((x) => x.confederation === c).length;
                   const ok = n <= cfg.confedMax[c] * 16;
                   return (
                     <div key={c} className="flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-night-950/40 px-3 py-2">
@@ -217,9 +217,12 @@ function Setup({ onStart, onCancel }: { onStart: (cfg: DrawConfig) => void; onCa
             </>
           ) : (
             <>
-              <div className="label">Participantes · 64 selecciones</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="label">Participantes · 64 selecciones</div>
+                <Button size="sm" variant="ghost" icon="swap" onClick={() => navigate('settings', 'participantes')}>Cambiar selecciones</Button>
+              </div>
               <div className="mt-3 grid grid-cols-8 gap-1.5 sm:grid-cols-11 xl:grid-cols-13">
-                {TEAMS.map((x, i) => (
+                {teams.map((x, i) => (
                   <motion.div key={x.id} initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.008 }}>
                     <Flag id={x.id} shape="circle" className="w-full" />
                   </motion.div>
@@ -227,7 +230,7 @@ function Setup({ onStart, onCancel }: { onStart: (cfg: DrawConfig) => void; onCa
               </div>
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {CONFEDERATIONS.map((c) => (
-                  <Chip key={c}>{c} · {TEAMS.filter((x) => x.confederation === c).length}</Chip>
+                  <Chip key={c}>{c} · {teams.filter((x) => x.confederation === c).length}</Chip>
                 ))}
               </div>
             </>
@@ -290,7 +293,7 @@ function Ceremony({ result, onRedo, onSaved, onBack }: { result: DrawResult; onR
   const remaining = steps.slice(revealed).map((s) => s.teamId);
   const pots = result.mode === 'pots' ? [0, 1, 2, 3].map((p) => steps.slice(revealed).filter((s) => s.pot === p).map((s) => s.teamId)) : null;
   const activePot = steps[revealed]?.pot ?? current?.pot;
-  const issues = done ? validateGroups(result.groups, { ...t.drawConfig, mode: result.mode }, t.ranking, ALL_TEAM_IDS) : [];
+  const issues = done ? validateGroups(result.groups, { ...t.drawConfig, mode: result.mode }, t.ranking, t.participants, t.hosts) : [];
   const errors = issues.filter((i) => i.level === 'error');
 
   return (
@@ -522,10 +525,10 @@ function ManualBoard({ onSaved, onBack }: { onSaved: () => void; onBack: () => v
   const [slotSel, setSlotSel] = useState<{ g: number; i: number } | null>(null);
   const [filter, setFilter] = useState('');
   const placed = new Set(groups.flat().filter(Boolean));
-  const pool = TEAMS.filter((x) => !placed.has(x.id) && (!filter || x.name.toLowerCase().includes(filter.toLowerCase()) || x.confederation.toLowerCase() === filter.toLowerCase()));
+  const pool = t.participants.map((id) => TEAM_BY_ID[id]).filter((x) => !placed.has(x.id) && (!filter || x.name.toLowerCase().includes(filter.toLowerCase()) || x.confederation.toLowerCase() === filter.toLowerCase()));
   const complete = placed.size === 64;
   const cfg = { ...t.drawConfig, mode: 'manual' as const };
-  const issues = validateGroups(groups.map((g) => g.filter(Boolean)), cfg, t.ranking, ALL_TEAM_IDS).filter((i) => complete || !i.message.includes('no está asignada') && !i.message.includes('tiene'));
+  const issues = validateGroups(groups.map((g) => g.filter(Boolean)), cfg, t.ranking, t.participants, t.hosts).filter((i) => complete || !i.message.includes('no está asignada') && !i.message.includes('tiene'));
   const invalid = new Set(issues.filter((i) => i.message.startsWith('Grupo')).map((i) => GROUP_LETTERS.indexOf(i.message.split(' ')[1].replace(':', ''))));
   const boardRef = useRef<HTMLDivElement>(null);
 
@@ -572,7 +575,7 @@ function ManualBoard({ onSaved, onBack }: { onSaved: () => void; onBack: () => v
           </div>
           <div className="flex flex-wrap gap-2">
             {slotSel && groups[slotSel.g][slotSel.i] && <Button size="sm" variant="danger" icon="x" onClick={removeSelected}>Quitar {name(groups[slotSel.g][slotSel.i])}</Button>}
-            <Button size="sm" variant="outline" icon="shuffle" disabled={complete} onClick={() => { setGroups(completeManualDraw(groups.map((g) => g.filter(Boolean)), cfg, ALL_TEAM_IDS).map((g) => g.slice())); sound.reveal(); }}>Completar al azar</Button>
+            <Button size="sm" variant="outline" icon="shuffle" disabled={complete} onClick={() => { setGroups(completeManualDraw(groups.map((g) => g.filter(Boolean)), cfg, t.participants).map((g) => g.slice())); sound.reveal(); }}>Completar al azar</Button>
             <Button size="sm" variant="ghost" icon="trash" onClick={() => { setGroups(Array.from({ length: 16 }, () => ['', '', '', ''])); setSlotSel(null); }}>Vaciar</Button>
             <Button size="sm" variant="ghost" onClick={onBack}>Configuración</Button>
           </div>

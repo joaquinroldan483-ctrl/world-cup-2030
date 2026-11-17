@@ -1,4 +1,4 @@
-import { HOST_IDS, TEAM_BY_ID } from './teams';
+import { TEAM_BY_ID } from './teams';
 import {
   CONFEDERATIONS,
   GROUP_COUNT,
@@ -31,10 +31,10 @@ export const DEFAULT_DRAW_CONFIG: DrawConfig = {
 export class DrawError extends Error {}
 
 /** Splits a ranking into 4 pots of 16 teams. */
-export function buildPots(ranking: string[], hostsSeeded: boolean): string[][] {
+export function buildPots(ranking: string[], hostsSeeded: boolean, hosts: string[] = []): string[][] {
   let order = ranking.slice();
-  if (hostsSeeded) {
-    order = [...HOST_IDS, ...order.filter((id) => !(HOST_IDS as readonly string[]).includes(id))];
+  if (hostsSeeded && hosts.length) {
+    order = [...hosts.filter((h) => order.includes(h)), ...order.filter((id) => !hosts.includes(id))];
   }
   const pots: string[][] = [];
   for (let p = 0; p < TEAMS_PER_GROUP; p++) pots.push(order.slice(p * GROUP_COUNT, (p + 1) * GROUP_COUNT));
@@ -145,6 +145,8 @@ export interface DrawOptions {
   rng?: RNG;
   ranking: string[];
   teamIds: string[];
+  /** Hosts pre-placed in groups A, B, C… when hostsSeeded is on. */
+  hosts?: string[];
 }
 
 /**
@@ -169,10 +171,10 @@ export function performDraw(config: DrawConfig, opts: DrawOptions): DrawResult {
 
   let potOf: Record<string, number> | null = null;
   let order: { id: string; pot?: number }[];
-  const hosts = config.hostsSeeded ? HOST_IDS.filter((h) => teamIds.includes(h)) : [];
+  const hosts = config.hostsSeeded ? (opts.hosts ?? []).filter((h) => teamIds.includes(h)).slice(0, GROUP_COUNT) : [];
 
   if (config.mode === 'pots') {
-    const pots = buildPots(opts.ranking.filter((id) => teamIds.includes(id)), config.hostsSeeded);
+    const pots = buildPots(opts.ranking.filter((id) => teamIds.includes(id)), config.hostsSeeded, hosts);
     // Teams missing from ranking (should not happen) are appended to the last pot.
     const ranked = new Set(pots.flat());
     const missing = teamIds.filter((id) => !ranked.has(id));
@@ -250,6 +252,7 @@ export function validateGroups(
   config: DrawConfig,
   ranking: string[],
   teamIds: string[],
+  hosts: string[] = [],
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (groups.length !== GROUP_COUNT) issues.push({ level: 'error', message: `Debe haber ${GROUP_COUNT} grupos.` });
@@ -282,7 +285,7 @@ export function validateGroups(
     });
   }
   if (config.mode === 'pots') {
-    const pots = buildPots(ranking, config.hostsSeeded);
+    const pots = buildPots(ranking, config.hostsSeeded, hosts);
     const potOf: Record<string, number> = {};
     pots.forEach((p, i) => p.forEach((id) => (potOf[id] = i)));
     groups.forEach((g, gi) => {

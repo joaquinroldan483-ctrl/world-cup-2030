@@ -17,6 +17,7 @@ import {
   type MediaAssets,
   type Palette,
 } from './canvasKit';
+import { currentEdition } from '../lib/theme';
 
 export type PosterTemplate = 'champion' | 'runnerUp' | 'semis' | 'journey' | 'summary';
 export type PosterStyle = 'gold' | 'crimson' | 'emerald' | 'hosts' | 'team' | 'white';
@@ -50,14 +51,19 @@ export function posterPalette(style: PosterStyle, teamId?: string): Palette {
       return { bg0: '#1a0307', bg1: '#5c0a14', glowA: 'rgba(255,77,91,0.4)', glowB: 'rgba(232,184,74,0.25)', accent: '#f6d77f', ink: '#ffffff', muted: 'rgba(255,230,230,0.65)', panel: 'rgba(0,0,0,0.32)', light: false };
     case 'emerald':
       return { bg0: '#01140b', bg1: '#06492c', glowA: 'rgba(61,220,151,0.35)', glowB: 'rgba(232,184,74,0.25)', accent: '#f6d77f', ink: '#ffffff', muted: 'rgba(220,255,240,0.65)', panel: 'rgba(0,0,0,0.3)', light: false };
-    case 'hosts':
-      return { bg0: '#070d1c', bg1: '#2a0a12', glowA: 'rgba(225,29,46,0.45)', glowB: 'rgba(16,178,108,0.4)', accent: '#ffc400', ink: '#ffffff', muted: 'rgba(255,255,255,0.65)', panel: 'rgba(5,9,20,0.45)', light: false };
+    case 'hosts': {
+      const e = currentEdition();
+      const c = e.def.colors;
+      return { bg0: c.night[0], bg1: c.night[4], glowA: hexA(e.stripe[0], 0.45), glowB: hexA(e.stripe[Math.min(3, e.stripe.length - 1)], 0.4), accent: c.accent[1], ink: '#ffffff', muted: 'rgba(255,255,255,0.65)', panel: 'rgba(5,9,20,0.45)', light: false };
+    }
     case 'team':
       return { bg0: '#05080f', bg1: team ? hexA(team.color, 1) : '#16244a', glowA: team ? hexA(team.color2, 0.45) : 'rgba(232,184,74,0.3)', glowB: team ? hexA(team.color, 0.5) : 'rgba(225,29,46,0.3)', accent: '#f6d77f', ink: '#ffffff', muted: 'rgba(255,255,255,0.7)', panel: 'rgba(0,0,0,0.38)', light: false };
     case 'white':
       return { bg0: '#e9e4d8', bg1: '#fbfaf6', glowA: 'rgba(225,29,46,0.12)', glowB: 'rgba(16,178,108,0.12)', accent: '#a87a1c', ink: '#0b1226', muted: 'rgba(11,18,38,0.6)', panel: 'rgba(255,255,255,0.75)', light: true };
-    default:
-      return { bg0: '#04070f', bg1: '#16244a', glowA: 'rgba(232,184,74,0.32)', glowB: 'rgba(76,195,255,0.18)', accent: '#f6d77f', ink: '#ffffff', muted: 'rgba(220,228,255,0.62)', panel: 'rgba(5,9,20,0.5)', light: false };
+    default: {
+      const c = currentEdition().def.colors;
+      return { bg0: c.night[0], bg1: c.night[4], glowA: hexA(c.accent[0], 0.32), glowB: hexA(c.secondary[0], 0.18), accent: c.accent[1], ink: '#ffffff', muted: 'rgba(220,228,255,0.62)', panel: 'rgba(5,9,20,0.5)', light: false };
+    }
   }
 }
 
@@ -78,13 +84,13 @@ export function renderPoster(ctx: Ctx, W: number, H: number, o: PosterOptions, d
 function header(ctx: Ctx, W: number, u: number, A: MediaAssets, p: Palette, right: string) {
   hostStripe(ctx, 0, 0, W, 12 * u);
   drawEmblem(ctx, 92 * u, 98 * u, 46 * u, A.trophy);
-  text(ctx, 'WORLD CUP 2030', 156 * u, 92 * u, { size: 38 * u, weight: 800, spacing: 6 * u, color: p.ink });
-  text(ctx, 'THE ROAD TO GLORY', 158 * u, 124 * u, { size: 21 * u, weight: 700, spacing: 7 * u, color: p.accent });
+  text(ctx, currentEdition().title, 156 * u, 92 * u, { size: 38 * u, weight: 800, spacing: 6 * u, color: p.ink });
+  text(ctx, currentEdition().def.tagline.toUpperCase(), 158 * u, 124 * u, { size: 21 * u, weight: 700, spacing: 7 * u, color: p.accent });
   if (right) text(ctx, right, W - 60 * u, 106 * u, { size: 22 * u, weight: 700, spacing: 4 * u, color: p.muted, align: 'right', maxWidth: 380 * u });
 }
 
 function footer(ctx: Ctx, W: number, H: number, u: number, p: Palette, subtitle?: string) {
-  text(ctx, 'ESPAÑA · PORTUGAL · MAROC', W / 2, H - 70 * u, { size: 24 * u, weight: 800, spacing: 12 * u, color: p.ink, align: 'center' });
+  text(ctx, currentEdition().hostsLabel, W / 2, H - 70 * u, { size: 24 * u, weight: 800, spacing: 12 * u, color: p.ink, align: 'center' });
   text(ctx, subtitle || 'Simulación personalizada · Fan edition', W / 2, H - 38 * u, { size: 17 * u, weight: 600, spacing: 3 * u, color: p.muted, align: 'center', maxWidth: 900 * u });
   hostStripe(ctx, 0, H - 12 * u, W, 12 * u);
 }
@@ -119,7 +125,7 @@ function journeyPoster(ctx: Ctx, W: number, H: number, u: number, o: PosterOptio
   // giant watermark
   ctx.save();
   ctx.globalAlpha = p.light ? 0.06 : 0.07;
-  text(ctx, '2030', W + 40 * u, 760 * u * Math.min(1, Hu / 1350), { font: 'display', size: 560 * u, color: p.ink, align: 'right' });
+  text(ctx, String(currentEdition().year), W + 40 * u, 760 * u * Math.min(1, Hu / 1350), { font: 'display', size: 560 * u, color: p.ink, align: 'right' });
   ctx.restore();
 
   // HERO
@@ -263,7 +269,7 @@ function pathSection(ctx: Ctx, x: number, y: number, w: number, rowH: number, ti
     const extra = s.result?.penalties ? `PEN ${s.isHome ? s.result.penalties.home : s.result.penalties.away}-${s.isHome ? s.result.penalties.away : s.result.penalties.home}` : s.result?.extraTime ? 'PRÓ.' : '';
     if (extra) text(ctx, extra, x + w - pad - tb - 10 * u, mid + 7 * u * k, { size: (wide ? 22 : 17) * u * k, weight: 800, color: p.accent, align: 'right' });
     rr(ctx, x + w - pad - tb, mid - tb / 2, tb, tb, 8 * u);
-    ctx.fillStyle = win ? '#10b26c' : lose ? '#e11d2e' : p.light ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.18)';
+    ctx.fillStyle = win ? '#10b26c' : lose ? '#d4283a' : p.light ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.18)';
     ctx.fill();
     text(ctx, tag, x + w - pad - tb / 2, mid + tb * 0.26, { size: tb * 0.7, weight: 800, color: '#fff', align: 'center' });
     y += rowH;

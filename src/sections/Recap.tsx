@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ALL_TEAM_IDS, TEAMS, TEAM_BY_ID } from '../engine';
+import { TEAM_BY_ID } from '../engine';
 import { Flag } from '../components/brand';
 import { Icon } from '../components/Icon';
 import { Button, Card, Chip, cx, EmptyState, IconButton, ProgressBar, SectionHeader, Segmented, Select, TextInput, Toggle } from '../components/ui';
@@ -11,6 +11,7 @@ import { canUseWebCodecs, encodeMp4, EncodeAbort, recordRealtime, type EncodeRes
 import { MUSIC_STYLES, renderSoundtrack } from '../media/video/music';
 import { buildTimeline, VIDEO_SIZE, type RecapOptions } from '../media/video/scenes';
 import { useDerived, useStore, useTeamName } from '../store/tournament';
+import { MomentumViewToggle, useMomentumView } from '../components/Momentum';
 import { toast } from '../store/ui';
 
 const DURATIONS = [30, 60, 90, 120];
@@ -28,18 +29,19 @@ export default function Recap({ param }: { param?: string }) {
     mode: param && TEAM_BY_ID[param] ? 'team' : 'tournament',
     teamId: param && TEAM_BY_ID[param] ? param : undefined,
     include: { minutes: true, scorers: true, cards: false, penalties: true },
-    title: 'The Road to Glory',
+    title: '',
     subtitle: '',
     credit: '',
   }));
   const set = (p: Partial<RecapOptions>) => setOpts((o) => ({ ...o, ...p }));
 
   useEffect(() => {
-    loadAssets(ALL_TEAM_IDS).then(setAssets).catch((e) => toast({ kind: 'error', title: 'No se pudieron cargar los recursos', message: (e as Error).message }));
-  }, []);
+    loadAssets(d.t.participants).then(setAssets).catch((e) => toast({ kind: 'error', title: 'No se pudieron cargar los recursos', message: (e as Error).message }));
+  }, [d.t.participants]);
 
   const teamId = opts.mode === 'team' ? opts.teamId ?? d.champion ?? d.groups[0]?.teamIds[0] : undefined;
-  const effective = useMemo(() => ({ ...opts, teamId }), [opts, teamId]);
+  const momentumView = useMomentumView();
+  const effective = useMemo(() => ({ ...opts, teamId, momentumView }), [opts, teamId, momentumView]);
 
   if (!d.drawn)
     return (
@@ -108,7 +110,7 @@ function Options({ opts, set, teamId }: { opts: RecapOptions; set: (p: Partial<R
             className="mt-3"
             value={teamId ?? ''}
             onChange={(v) => set({ teamId: v })}
-            options={TEAMS.filter((x) => d.groups.some((g) => g.teamIds.includes(x.id))).map((x) => ({ value: x.id, label: `${name(x.id)}${x.id === d.champion ? ' 🏆' : ''}` }))}
+            options={d.t.participants.map((id) => TEAM_BY_ID[id]).filter((x) => d.groups.some((g) => g.teamIds.includes(x.id))).map((x) => ({ value: x.id, label: `${name(x.id)}${x.id === d.champion ? ' 🏆' : ''}` }))}
           />
         )}
       </div>
@@ -143,10 +145,14 @@ function Options({ opts, set, teamId }: { opts: RecapOptions; set: (p: Partial<R
         <Toggle checked={opts.include.scorers} onChange={(v) => set({ include: { ...opts.include, scorers: v } })} label="Nombres de los goleadores" />
         <Toggle checked={opts.include.penalties} onChange={(v) => set({ include: { ...opts.include, penalties: v } })} label="Penales (tandas y errados)" />
         <Toggle checked={opts.include.cards} onChange={(v) => set({ include: { ...opts.include, cards: v } })} label="Tarjetas" />
+        <div className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm font-medium">Momentum en los partidos</span>
+          <MomentumViewToggle />
+        </div>
       </div>
       <div className="space-y-3">
         <div className="label">Textos personalizados</div>
-        <TextInput placeholder="Lema de la presentación" value={opts.title} maxLength={50} onChange={(e) => set({ title: e.target.value })} />
+        <TextInput placeholder="Lema de la presentación (por defecto, el de la edición)" value={opts.title} maxLength={50} onChange={(e) => set({ title: e.target.value })} />
         <TextInput placeholder="Subtítulo de la imagen final" value={opts.subtitle} maxLength={60} onChange={(e) => set({ subtitle: e.target.value })} />
         <TextInput placeholder="Créditos (p. ej. «Simulado por …»)" value={opts.credit} maxLength={60} onChange={(e) => set({ credit: e.target.value })} />
       </div>
@@ -337,7 +343,7 @@ function Exporter({ opts, assets, filename }: { opts: RecapOptions; assets: Medi
   const saveVideo = async () => {
     const r = state.result!;
     const file = `${filename}.${r.ext}`;
-    if (canShareFiles(r.blob.type) && (await shareFile(r.blob, file, 'World Cup 2030 — Cinematic Recap'))) return;
+    if (canShareFiles(r.blob.type) && (await shareFile(r.blob, file, `World Cup ${d.t.edition} — Cinematic Recap`))) return;
     downloadBlob(r.blob, file);
   };
 
@@ -388,7 +394,7 @@ function Exporter({ opts, assets, filename }: { opts: RecapOptions; assets: Medi
               className="w-full"
               icon="share"
               onClick={async () => {
-                const ok = await shareFile(state.result!.blob, `${filename}.${state.result!.ext}`, 'World Cup 2030 — Cinematic Recap');
+                const ok = await shareFile(state.result!.blob, `${filename}.${state.result!.ext}`, `World Cup ${d.t.edition} — Cinematic Recap`);
                 if (!ok) {
                   downloadBlob(state.result!.blob, `${filename}.${state.result!.ext}`);
                   toast({ kind: 'info', title: 'Compartir no disponible', message: 'Se descargó el archivo para que lo compartas.' });

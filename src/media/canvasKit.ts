@@ -1,5 +1,6 @@
 import { TROPHY_DATA_URL } from '../components/brand';
 import { loadAllFlags } from '../lib/flags';
+import { currentEdition } from '../lib/theme';
 
 export type Ctx = CanvasRenderingContext2D;
 
@@ -37,13 +38,14 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-let assetsCache: Promise<MediaAssets> | null = null;
+let baseCache: Promise<Omit<MediaAssets, 'flags'>> | null = null;
 
+/** Loads fonts, trophy, grain (once) and the flags of the given teams (each flag cached individually). */
 export function loadAssets(teamIds: string[]): Promise<MediaAssets> {
-  if (!assetsCache) {
-    assetsCache = (async () => {
+  if (!baseCache) {
+    baseCache = (async () => {
       await ensureFonts();
-      const [flags, trophy] = await Promise.all([loadAllFlags(teamIds), loadImage(TROPHY_DATA_URL)]);
+      const trophy = await loadImage(TROPHY_DATA_URL);
       const grain = document.createElement('canvas');
       grain.width = grain.height = 256;
       const g = grain.getContext('2d')!;
@@ -54,11 +56,11 @@ export function loadAssets(teamIds: string[]): Promise<MediaAssets> {
         img.data[i + 3] = 22;
       }
       g.putImageData(img, 0, 0);
-      return { flags, trophy, grain };
+      return { trophy, grain };
     })();
-    assetsCache.catch(() => (assetsCache = null));
+    baseCache.catch(() => (baseCache = null));
   }
-  return assetsCache;
+  return Promise.all([baseCache, loadAllFlags(teamIds)]).then(([base, flags]) => ({ ...base, flags }));
 }
 
 export function rr(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {
@@ -237,15 +239,15 @@ export function bronzeGradient(ctx: Ctx, y0: number, y1: number) {
   return g;
 }
 
-export const HOST_STRIPES = ['#c60b1e', '#ffc400', '#c60b1e', '#046a38', '#da291c', '#c1272d', '#006233'];
+/** Colours of the active edition's identity stripe. */
+export const hostStripeColors = () => currentEdition().stripe;
 
 export function hostStripe(ctx: Ctx, x: number, y: number, w: number, h: number) {
-  const parts = [0.22, 0.11, 0.11, 0.11, 0.11, 0.17, 0.17];
-  let cx = x;
-  parts.forEach((p, i) => {
-    ctx.fillStyle = HOST_STRIPES[i];
-    ctx.fillRect(cx, y, w * p + 0.5, h);
-    cx += w * p;
+  const cols = hostStripeColors();
+  const part = w / cols.length;
+  cols.forEach((c, i) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x + i * part, y, part + 0.5, h);
   });
 }
 
@@ -367,17 +369,18 @@ export function drawStadium(ctx: Ctx, w: number, h: number, t: number, p: Palett
   }
 }
 
-/** The 2030 emblem ring (Spain red, gold, Morocco/Portugal green) around the trophy. */
+/** The edition emblem: a ring in the hosts' colours around the trophy. */
 export function drawEmblem(ctx: Ctx, cx: number, cy: number, r: number, trophy: HTMLImageElement, progress = 1) {
   ctx.save();
+  const night = currentEdition().def.colors.night;
   const bg = ctx.createRadialGradient(cx, cy - r * 0.2, 0, cx, cy, r);
-  bg.addColorStop(0, '#1a2a58');
-  bg.addColorStop(1, '#060b18');
+  bg.addColorStop(0, night[4]);
+  bg.addColorStop(1, night[0]);
   ctx.fillStyle = bg;
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
-  const colors = ['#e11d2e', '#ffc400', '#10b26c'];
+  const colors = currentEdition().ring;
   ctx.lineWidth = r * 0.15;
   ctx.lineCap = 'round';
   const gap = 0.32;

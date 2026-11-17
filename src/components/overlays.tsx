@@ -9,6 +9,7 @@ import { useUI } from '../store/ui';
 import { Flag, Trophy } from './brand';
 import { Icon } from './Icon';
 import { Button, Modal } from './ui';
+import { currentEdition } from '../lib/theme';
 
 export function ConfirmHost() {
   const req = useUI((s) => s.confirmReq);
@@ -79,7 +80,6 @@ export function ToastHost() {
   );
 }
 
-const STRIPES = ['#c60b1e', '#ffc400', '#e8b84a', '#006600', '#c1272d', '#006233'];
 
 export function CelebrationHost() {
   const queue = useUI((s) => s.celebrations);
@@ -143,7 +143,7 @@ export function CelebrationHost() {
       {current?.kind === 'phase' && (
         <motion.div key={`p${current.stage}`} className="fixed inset-0 z-[90] flex items-center justify-center overflow-hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={shift}>
           <div className="absolute inset-0 bg-night-950/80 backdrop-blur-sm" />
-          {STRIPES.map((c, i) => (
+          {currentEdition().stripe.slice(0, 6).map((c, i) => (
             <motion.div
               key={i}
               className="absolute h-[16vh] w-[160vw] -rotate-12"
@@ -222,7 +222,7 @@ function ChampionCelebration({ teamId, onClose }: { teamId: string; onClose: () 
         <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.3, duration: 0.9, ease: [0.2, 0.8, 0.2, 1] }}>
           <Trophy className="h-52 w-32 animate-float sm:h-72 sm:w-44" />
         </motion.div>
-        <div className="label mt-4 !text-gold-light !tracking-[0.4em]">World Cup 2030 · Campeón del mundo</div>
+        <div className="label mt-4 !text-gold-light !tracking-[0.4em]">{currentEdition().def.title} · Campeón del mundo</div>
         <motion.div className="mt-3 flex items-center gap-4" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
           <Flag id={teamId} className="w-16 sm:w-24" />
           <h2 className="font-display text-5xl uppercase leading-none text-gold-gradient sm:text-8xl">{name(teamId)}</h2>

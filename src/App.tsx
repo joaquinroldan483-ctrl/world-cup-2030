@@ -6,6 +6,7 @@ import { Shell } from './components/Shell';
 import { Button } from './components/ui';
 import { useRoute } from './lib/router';
 import { useStore } from './store/tournament';
+import { applyEdition, useEdition } from './lib/theme';
 import Home from './sections/Home';
 
 const Draw = lazy(() => import('./sections/Draw'));
@@ -54,9 +55,14 @@ export default function App() {
   const ready = useStore((s) => s.ready);
   const init = useStore((s) => s.init);
   const route = useRoute();
+  const edition = useEdition();
   useEffect(() => {
     void init();
   }, [init]);
+  useEffect(() => {
+    applyEdition(edition);
+    document.title = `${edition.def.title.replace('WORLD CUP', 'World Cup')} — ${edition.def.tagline}`;
+  }, [edition]);
 
   if (!ready)
     return (
@@ -85,7 +91,7 @@ export default function App() {
       case 'poster':
         return <Poster param={route.param} />;
       case 'settings':
-        return <Settings />;
+        return <Settings param={route.param} />;
       default:
         return <Home />;
     }

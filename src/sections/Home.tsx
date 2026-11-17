@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
-import { HOST_IDS, STAGE_SHORT, currentPhase, type KnockoutStage } from '../engine';
+import { EDITION_IDS, EDITIONS, STAGE_SHORT, currentPhase, type EditionId, type KnockoutStage } from '../engine';
+import { editionVisual, useEdition } from '../lib/theme';
 import { Emblem, Flag, Trophy } from '../components/brand';
 import { Icon, type IconName } from '../components/Icon';
 import { Button, Card, Chip, cx, ProgressBar } from '../components/ui';
@@ -34,7 +35,7 @@ const PHASES: { key: string; label: string }[] = [
   { key: 'finished', label: 'Campeón' },
 ];
 
-const HOST_LABEL: Record<string, string> = { ESP: 'España', POR: 'Portugal', MAR: 'Marruecos · المغرب' };
+const HOST_LABEL: Record<string, string> = { ESP: 'España', POR: 'Portugal', MAR: 'Marruecos · المغرب', KSA: 'Arabia Saudita · السعودية' };
 
 export default function Home() {
   const t = useStore((s) => s.t);
@@ -45,6 +46,7 @@ export default function Home() {
   const phase = currentPhase(d);
   const phaseIdx = PHASES.findIndex((p) => p.key === phase);
   const [editing, setEditing] = useState(false);
+  const ed = useEdition();
 
   const next = useMemo((): { label: string; section: SectionId; icon: IconName } => {
     if (phase === 'draw') return { label: 'Comenzar el sorteo', section: 'draw', icon: 'draw' };
@@ -60,7 +62,7 @@ export default function Home() {
     <div className="space-y-8">
       {/* HERO */}
       <section className="relative -mx-4 -mt-5 overflow-hidden sm:mx-0 sm:mt-0 sm:rounded-[2rem]">
-        <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_70%_30%,rgba(232,184,74,0.18),transparent_60%),linear-gradient(160deg,#101d40_0%,#070d1c_55%,#04070f_100%)]" />
+        <div className="absolute inset-0" style={{ background: 'radial-gradient(90% 70% at 70% 30%, color-mix(in srgb, var(--color-gold) 18%, transparent), transparent 60%), linear-gradient(160deg, var(--color-night-700) 0%, var(--color-night-900) 55%, var(--color-night-950) 100%)' }} />
         <div className="absolute inset-0 pitch-lines opacity-50 [mask-image:radial-gradient(70%_80%_at_50%_100%,black,transparent)]" />
         <motion.div className="absolute -left-20 top-0 h-[140%] w-40 -rotate-[20deg] bg-crimson/25 blur-3xl" animate={{ x: [0, 40, 0] }} transition={{ duration: 9, repeat: Infinity }} />
         <motion.div className="absolute -right-10 top-0 h-[140%] w-40 rotate-[20deg] bg-emerald/25 blur-3xl" animate={{ x: [0, -40, 0] }} transition={{ duration: 11, repeat: Infinity }} />
@@ -73,18 +75,24 @@ export default function Home() {
             </motion.div>
             <motion.h1 initial={{ opacity: 0, y: 30, letterSpacing: '0.3em' }} animate={{ opacity: 1, y: 0, letterSpacing: '0.02em' }} transition={{ duration: 0.9, ease: [0.2, 0.8, 0.2, 1] }} className="mt-5 font-display uppercase leading-[0.85]">
               <span className="block text-[2.4rem] text-white sm:text-6xl lg:text-7xl">World Cup</span>
-              <span className="block text-[6.5rem] text-hosts-gradient drop-shadow-[0_10px_40px_rgba(232,184,74,0.25)] sm:text-[10rem] lg:text-[12rem]">2030</span>
+              <span className="block text-[6.5rem] text-hosts-gradient drop-shadow-[0_10px_40px_rgba(0,0,0,0.35)] sm:text-[10rem] lg:text-[12rem]">{ed.year}</span>
             </motion.h1>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-1 font-cond text-xl font-bold uppercase tracking-[0.5em] text-gold-light sm:text-2xl">
-              The Road to Glory
+              {ed.def.tagline}
             </motion.div>
+            <div className="mt-2 text-sm text-white/60">{ed.def.theme}</div>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="mt-6 flex flex-wrap gap-2">
-              {HOST_IDS.map((id) => (
+              {t.hosts.map((id) => (
                 <span key={id} className="flex items-center gap-2 rounded-full border border-white/10 bg-white/6 py-1 pl-1 pr-3.5">
                   <Flag id={id} shape="circle" className="w-7" />
-                  <span className="font-cond text-sm font-bold uppercase tracking-wider">{HOST_LABEL[id]}</span>
+                  <span className="font-cond text-sm font-bold uppercase tracking-wider">{HOST_LABEL[id] ?? name(id)}</span>
                 </span>
               ))}
+              {t.hosts.length === 0 && (
+                <button onClick={() => navigate('settings', 'participantes')} className="flex items-center gap-2 rounded-full border border-dashed border-gold/50 bg-gold/10 px-3.5 py-1.5 font-cond text-sm font-bold uppercase tracking-wider text-gold-light">
+                  <Icon name="flag" size={16} /> Elegir anfitriones
+                </button>
+              )}
             </motion.div>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85 }} className="mt-8 flex flex-wrap gap-3">
               <Button variant="gold" size="lg" icon={next.icon} onClick={() => navigate(next.section)}>
@@ -107,7 +115,7 @@ export default function Home() {
           <Trophy className="h-20 w-12 shrink-0" glow={false} />
           <Flag id={d.champion} className="w-16" />
           <div className="min-w-0">
-            <div className="label !text-gold-light">Campeón del mundo 2030</div>
+            <div className="label !text-gold-light">Campeón del mundo {ed.year}</div>
             <div className="truncate font-display text-3xl uppercase sm:text-4xl">{name(d.champion)}</div>
             <div className="text-sm text-white/60">Subcampeón: {name(d.runnerUp)} · Tercero: {name(d.third)}</div>
           </div>
@@ -188,6 +196,8 @@ export default function Home() {
         </Card>
       </div>
 
+      <EditionsPanel />
+
       {/* SECTIONS */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {(
@@ -220,7 +230,7 @@ export default function Home() {
       </div>
 
       <p className="mx-auto max-w-3xl text-center text-xs leading-relaxed text-white/35">
-        Proyecto de aficionados sin afiliación oficial. El formato de 64 selecciones y la lista de participantes son una configuración personalizada del usuario y no información oficial del Mundial 2030.
+        Proyecto de aficionados sin afiliación oficial. El formato de 64 selecciones, la lista de participantes y las fechas son una configuración personalizada del usuario, no información oficial de los Mundiales 2030, 2034 o 2038.
         Banderas: flag-icons (MIT). Música y efectos de sonido generados de forma procedural y original.
       </p>
     </div>
@@ -233,5 +243,111 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="font-display text-2xl tabular">{value}</div>
       <div className="text-[11px] leading-tight text-white/45">{label}</div>
     </div>
+  );
+}
+
+const EDITION_ART: Record<EditionId, string> = {
+  '2030': 'Rojo, verde y oro de los anfitriones · Estrecho de Gibraltar',
+  '2034': 'Verde profundo, oro de las dunas y mosaicos geométricos',
+  '2038': 'Neón, plasma y cielos índigo · sede a tu elección',
+};
+
+/** The three World Cups of the app, each with its own tournaments and visual identity. */
+function EditionsPanel() {
+  const index = useStore((s) => s.index);
+  const t = useStore((s) => s.t);
+  const openEdition = useStore((s) => s.openEdition);
+  const newTournament = useStore((s) => s.newTournament);
+  const name = useTeamName();
+  const ed = useEdition();
+  return (
+    <section>
+      <div className="mb-3 flex items-end justify-between gap-3">
+        <div>
+          <div className="label">Los Mundiales</div>
+          <h2 className="font-display text-3xl uppercase">2030 · 2034 · 2038</h2>
+        </div>
+        <Button size="sm" variant="ghost" icon="plus" onClick={() => newTournament(undefined, t.edition)}>Nueva simulación {ed.year}</Button>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {EDITION_IDS.map((id, i) => {
+          const def = EDITIONS[id];
+          const v = editionVisual(id, id === t.edition ? t.hosts : def.defaultHosts);
+          const mine = index.filter((m) => (m.edition ?? '2030') === id);
+          const champ = mine.find((m) => m.champion)?.champion;
+          const active = id === t.edition;
+          return (
+            <motion.button
+              key={id}
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.06 * i }}
+              whileHover={{ y: -4 }}
+              onClick={() => openEdition(id)}
+              className={cx('relative overflow-hidden rounded-2xl border p-5 text-left', active ? 'border-white/35' : 'border-white/10')}
+              style={{ background: `linear-gradient(150deg, ${def.colors.night[4]} 0%, ${def.colors.night[1]} 60%, ${def.colors.night[0]} 100%)` }}
+            >
+              <div className="absolute inset-x-0 top-0 h-1.5" style={{ background: `linear-gradient(90deg, ${v.stripe.join(',')})` }} />
+              <div className={cx('absolute inset-0 opacity-[0.12]', def.colors.motif === 'desert' ? 'motif-desert' : def.colors.motif === 'future' ? 'motif-future' : 'pitch-lines')} />
+              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full blur-3xl" style={{ background: def.colors.primary[0], opacity: 0.35 }} />
+              <div className="relative flex items-start justify-between gap-3">
+                <div>
+                  <div className="font-cond text-xs font-bold uppercase tracking-[0.3em] text-white/60">World Cup</div>
+                  <div className="font-display text-6xl leading-none" style={{ backgroundImage: `linear-gradient(100deg, ${def.colors.heroGradient.join(',')})`, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent' }}>
+                    {def.year}
+                  </div>
+                </div>
+                <Emblem size={52} ring={v.ring} />
+              </div>
+              <div className="relative mt-3 font-cond text-base font-bold uppercase tracking-wide" style={{ color: def.colors.accent[1] }}>{def.tagline}</div>
+              <div className="relative text-sm text-white/70">{def.theme}</div>
+              <div className="relative mt-1 text-xs text-white/45">{EDITION_ART[id]}</div>
+              <div className="relative mt-4 flex items-center gap-2">
+                {(id === t.edition ? t.hosts : def.defaultHosts).map((h) => (
+                  <Flag key={h} id={h} shape="circle" className="w-7" />
+                ))}
+                {def.hostsEditable && !(id === t.edition && t.hosts.length) && <span className="text-xs text-white/50">Sede a tu elección</span>}
+                <span className="ml-auto text-right text-[11px] text-white/55">
+                  {mine.length} {mine.length === 1 ? 'simulación' : 'simulaciones'}
+                  {champ && (
+                    <span className="mt-0.5 flex items-center justify-end gap-1 text-white/80">
+                      <Icon name="trophy" size={12} /> {name(champ)}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="relative mt-4">
+                {active ? (
+                  <Chip tone="gold">Edición activa</Chip>
+                ) : (
+                  <span className="inline-flex items-center gap-1 font-cond text-sm font-bold uppercase tracking-wider text-white/80">
+                    Entrar <Icon name="chevronRight" size={14} />
+                  </span>
+                )}
+              </div>
+            </motion.button>
+          );
+        })}
+      </div>
+      <Card className="mt-3 grid gap-4 p-5 md:grid-cols-[1.4fr_1fr]">
+        <div>
+          <div className="label">{ed.def.title} · {ed.def.theme}</div>
+          <p className="mt-2 text-[15px] leading-relaxed text-white/75">{ed.def.description}</p>
+          {ed.def.hostsEditable && (
+            <Button className="mt-3" size="sm" variant="outline" icon="flag" onClick={() => navigate('settings', 'participantes')}>
+              {t.hosts.length ? 'Cambiar anfitriones' : 'Elegir anfitriones'}
+            </Button>
+          )}
+        </div>
+        <ul className="space-y-2 text-sm text-white/65">
+          {ed.def.facts.map((f) => (
+            <li key={f} className="flex gap-2">
+              <Icon name="check" size={16} className="mt-0.5 shrink-0 text-gold-light" />
+              {f}
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </section>
   );
 }

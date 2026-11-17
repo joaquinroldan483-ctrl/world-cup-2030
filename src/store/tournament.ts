@@ -10,6 +10,9 @@ import {
   deriveTournament,
   formatScoreline,
   invalidatedBy,
+  migrateTournament,
+  EDITIONS,
+  type EditionId,
   parseTournament,
   stageMatches,
   uid,
@@ -45,7 +48,9 @@ interface State {
   undo: () => void;
   redo: () => void;
   setPrefs: (p: Partial<Prefs>) => void;
-  newTournament: (name?: string) => Promise<void>;
+  newTournament: (name?: string, edition?: EditionId) => Promise<void>;
+  /** Opens the most recent tournament of an edition, creating one if there is none. */
+  openEdition: (edition: EditionId) => Promise<void>;
   switchTournament: (id: string) => Promise<void>;
   duplicateTournament: (id: string) => Promise<void>;
   renameTournament: (id: string, name: string) => Promise<void>;
@@ -55,7 +60,7 @@ interface State {
 
 const metaOf = (t: Tournament): TournamentMeta => {
   const d = deriveTournament(t);
-  return { id: t.id, name: t.name, createdAt: t.createdAt, updatedAt: t.updatedAt, phase: currentPhase(d), champion: d.champion };
+  return { id: t.id, name: t.name, createdAt: t.createdAt, updatedAt: t.updatedAt, phase: currentPhase(d), champion: d.champion, edition: t.edition };
 };
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -110,6 +115,7 @@ export const useStore = create<State>((set, get) => {
           if (t) break;
         }
       }
+      if (t) t = migrateTournament(t);
       if (!t) {
         t = createTournament();
         await persistence.saveTournament(t);
@@ -180,9 +186,11 @@ export const useStore = create<State>((set, get) => {
       void persistence.savePrefs(prefs);
     },
 
-    newTournament: async (name) => {
+    newTournament: async (name, edition) => {
       await flushSave(get);
-      const t = createTournament(name || `Mundial 2030 · ${get().index.length + 1}`);
+      const ed = edition ?? get().t.edition ?? '2030';
+      const count = get().index.filter((m) => (m.edition ?? '2030') === ed).length;
+      const t = createTournament(name || `Mundial ${EDITIONS[ed].year}${count ? ` · ${count + 1}` : ''}`, ed);
       await persistence.saveTournament(t);
       const index = [...get().index, metaOf(t)];
       await persistence.saveIndex(index);
@@ -192,10 +200,20 @@ export const useStore = create<State>((set, get) => {
       toast({ kind: 'success', title: 'Nuevo torneo creado', message: t.name });
     },
 
+    openEdition: async (edition) => {
+      if (get().t.edition === edition) return;
+      const latest = get()
+        .index.filter((m) => (m.edition ?? '2030') === edition)
+        .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      if (latest) await get().switchTournament(latest.id);
+      else await get().newTournament(undefined, edition);
+    },
+
     switchTournament: async (id) => {
       if (id === get().t.id) return;
       await flushSave(get);
-      const t = await persistence.loadTournament(id);
+      const loaded = await persistence.loadTournament(id);
+      const t = loaded ? migrateTournament(loaded) : undefined;
       if (!t) {
         toast({ kind: 'error', title: 'No se encontró el torneo' });
         return;
@@ -211,7 +229,7 @@ export const useStore = create<State>((set, get) => {
       const src = id === get().t.id ? get().t : await persistence.loadTournament(id);
       if (!src) return;
       const now = Date.now();
-      const copy: Tournament = { ...structuredClone(src), id: uid('t_'), name: `${src.name} (copia)`, createdAt: now, updatedAt: now };
+      const copy: Tournament = { ...migrateTournament(structuredClone(src)), id: uid('t_'), name: `${src.name} (copia)`, createdAt: now, updatedAt: now };
       await persistence.saveTournament(copy);
       const index = [...get().index, metaOf(copy)];
       await persistence.saveIndex(index);

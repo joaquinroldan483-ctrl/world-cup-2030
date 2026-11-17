@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ALL_TEAM_IDS, TEAMS, TEAM_BY_ID } from '../engine';
+import { TEAM_BY_ID } from '../engine';
 import { Icon, type IconName } from '../components/Icon';
 import { Button, Card, cx, EmptyState, SectionHeader, Segmented, Select, TextInput } from '../components/ui';
 import { canShareFiles, downloadBlob, formatBytes, isIOS, shareFile, slugify } from '../lib/download';
@@ -44,8 +44,8 @@ export default function Poster({ param }: { param?: string }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    loadAssets(ALL_TEAM_IDS).then(setAssets).catch((e) => toast({ kind: 'error', title: 'Error al cargar recursos', message: (e as Error).message }));
-  }, []);
+    loadAssets(d.t.participants).then(setAssets).catch((e) => toast({ kind: 'error', title: 'Error al cargar recursos', message: (e as Error).message }));
+  }, [d.t.participants]);
 
   const semifinalists = useMemo(() => ['SF-1', 'SF-2'].flatMap((id) => [d.ko[id]?.homeId, d.ko[id]?.awayId]).filter(Boolean) as string[], [d]);
   const drawnTeams = d.groups.flatMap((g) => g.teamIds);
@@ -79,7 +79,7 @@ export default function Poster({ param }: { param?: string }) {
       </>
     );
 
-  const fileBase = slugify(`wc2030-${o.template}-${teamId ? name(teamId) : 'resumen'}`);
+  const fileBase = slugify(`wc${d.t.edition}-${o.template}-${teamId ? name(teamId) : 'resumen'}`);
   const toBlob = (type: 'image/png' | 'image/jpeg') =>
     new Promise<Blob>((resolve, reject) => canvas.current!.toBlob((b) => (b ? resolve(b) : reject(new Error('No se pudo generar la imagen'))), type, 0.95));
 
@@ -87,7 +87,7 @@ export default function Poster({ param }: { param?: string }) {
     setBusy(true);
     try {
       const blob = await toBlob(type);
-      if (isIOS() && canShareFiles(type) && (await shareFile(blob, `${fileBase}.${type === 'image/png' ? 'png' : 'jpg'}`, 'World Cup 2030 — Legendary Poster'))) return;
+      if (isIOS() && canShareFiles(type) && (await shareFile(blob, `${fileBase}.${type === 'image/png' ? 'png' : 'jpg'}`, `World Cup ${d.t.edition} — Legendary Poster`))) return;
       downloadBlob(blob, `${fileBase}.${type === 'image/png' ? 'png' : 'jpg'}`);
       toast({ kind: 'success', title: 'Póster descargado', message: `${W}×${H} · ${formatBytes(blob.size)}` });
     } catch (e) {
@@ -100,7 +100,7 @@ export default function Poster({ param }: { param?: string }) {
     setBusy(true);
     try {
       const blob = await toBlob('image/png');
-      if (await shareFile(blob, `${fileBase}.png`, 'World Cup 2030 — Legendary Poster')) return;
+      if (await shareFile(blob, `${fileBase}.png`, `World Cup ${d.t.edition} — Legendary Poster`)) return;
       if (navigator.clipboard && 'ClipboardItem' in window) {
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
         toast({ kind: 'success', title: 'Imagen copiada al portapapeles' });
@@ -116,7 +116,7 @@ export default function Poster({ param }: { param?: string }) {
   };
 
   const teamOptions =
-    o.template === 'semis' ? semifinalists : drawnTeams.length ? TEAMS.map((t) => t.id).filter((id) => drawnTeams.includes(id)) : [];
+    o.template === 'semis' ? semifinalists : drawnTeams.length ? d.t.participants.filter((id) => drawnTeams.includes(id)) : [];
 
   return (
     <div>

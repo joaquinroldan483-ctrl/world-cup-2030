@@ -1,5 +1,5 @@
 import { createStore, del, get, set, type UseStore } from 'idb-keyval';
-import type { Tournament } from '../engine';
+import type { EditionId, Tournament } from '../engine';
 
 export interface TournamentMeta {
   id: string;
@@ -8,6 +8,7 @@ export interface TournamentMeta {
   updatedAt: number;
   phase: string;
   champion?: string;
+  edition?: EditionId;
 }
 
 export interface Prefs {
@@ -15,6 +16,8 @@ export interface Prefs {
   sound: boolean;
   volume: number;
   animations: boolean;
+  /** How momentum is displayed: bars or an area chart. */
+  momentumView?: 'bars' | 'chart';
 }
 
 export const DEFAULT_PREFS: Prefs = { sound: true, volume: 0.7, animations: true };

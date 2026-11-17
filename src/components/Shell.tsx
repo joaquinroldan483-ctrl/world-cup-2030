@@ -6,6 +6,9 @@ import { useUI } from '../store/ui';
 import { Emblem, StadiumBackdrop } from './brand';
 import { Icon, type IconName } from './Icon';
 import { cx, IconButton } from './ui';
+import { EDITION_IDS, EDITIONS } from '../engine';
+import { editionVisual, useEdition } from '../lib/theme';
+import { sound } from '../lib/sound';
 
 export const NAV: { id: SectionId; label: string; sub: string; icon: IconName }[] = [
   { id: 'home', label: 'Home', sub: 'Inicio', icon: 'home' },
@@ -44,7 +47,38 @@ function UndoRedo() {
   );
 }
 
+/** Switch between the 2030, 2034 and 2038 World Cups. Each keeps its own tournaments. */
+export function EditionSwitcher({ compact, onDone }: { compact?: boolean; onDone?: () => void }) {
+  const current = useStore((s) => s.t.edition);
+  const openEdition = useStore((s) => s.openEdition);
+  return (
+    <div className={cx('grid grid-cols-3 gap-1.5', compact && 'gap-1')}>
+      {EDITION_IDS.map((id) => {
+        const v = editionVisual(id, EDITIONS[id].defaultHosts);
+        const active = id === current;
+        return (
+          <button
+            key={id}
+            onClick={async () => {
+              sound.click();
+              await openEdition(id);
+              onDone?.();
+            }}
+            aria-pressed={active}
+            className={cx('relative overflow-hidden rounded-xl border px-2 py-2 text-center transition', active ? 'border-white/40 bg-white/10' : 'border-white/8 bg-white/3 hover:border-white/20')}
+          >
+            <span className="absolute inset-x-0 top-0 h-[3px]" style={{ background: `linear-gradient(90deg, ${v.stripe.join(',')})` }} />
+            <span className="block font-display text-lg leading-none" style={{ color: active ? v.def.colors.accent[1] : 'rgba(255,255,255,0.6)' }}>{id}</span>
+            {!compact && <span className="mt-0.5 block truncate text-[10px] text-white/45">{id === '2030' ? 'ESP·POR·MAR' : id === '2034' ? 'Arabia S.' : 'A elección'}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Shell({ section, children }: { section: SectionId; children: ReactNode }) {
+  const edition = useEdition();
   const tName = useStore((s) => s.t.name);
   const moreOpen = useUI((s) => s.moreOpen);
   const setMoreOpen = useUI((s) => s.setMoreOpen);
@@ -84,9 +118,13 @@ export function Shell({ section, children }: { section: SectionId; children: Rea
           <Emblem size={46} />
           <div className="leading-none">
             <div className="font-cond text-[11px] font-bold uppercase tracking-[0.32em] text-white/55">World Cup</div>
-            <div className="font-display text-[30px] tracking-wide text-gold-gradient">2030</div>
+            <div className="font-display text-[30px] tracking-wide text-gold-gradient">{edition.year}</div>
           </div>
         </button>
+        <div className="px-4 pb-4">
+          <div className="label mb-1.5">Mundiales</div>
+          <EditionSwitcher />
+        </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3">
           {NAV.map((n) => {
             const active = n.id === section;
@@ -129,7 +167,7 @@ export function Shell({ section, children }: { section: SectionId; children: Rea
         </button>
         <div className="min-w-0 flex-1 leading-tight">
           <div className="truncate font-cond text-[15px] font-bold uppercase tracking-[0.1em]">{current.label}</div>
-          <div className="truncate text-[11px] text-white/45">{tName}</div>
+          <div className="truncate text-[11px] text-white/45">{edition.year} · {tName}</div>
         </div>
         <UndoRedo />
       </header>
@@ -165,6 +203,10 @@ export function Shell({ section, children }: { section: SectionId; children: Rea
             <div className="absolute inset-0 bg-night-950/70 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
             <motion.div className="glass-strong absolute inset-x-0 bottom-0 rounded-t-3xl p-4 pb-[calc(1.25rem+var(--safe-bottom))]" initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }}>
               <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/20" />
+              <div className="label mb-1.5 px-1">Mundiales</div>
+              <div className="mb-4">
+                <EditionSwitcher onDone={() => setMoreOpen(false)} />
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 {NAV.filter((n) => !MOBILE_TABS.includes(n.id)).map((n) => (
                   <button

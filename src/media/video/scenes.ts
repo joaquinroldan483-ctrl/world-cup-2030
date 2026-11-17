@@ -1,9 +1,7 @@
 import {
   GROUP_LETTERS,
-  HOST_IDS,
   STAGE_LABEL,
   STAGE_SHORT,
-  TEAMS,
   TEAM_BY_ID,
   buildJourney,
   computeStats,
@@ -29,7 +27,7 @@ import {
   drawWavingFlag,
   ease,
   goldGradient,
-  HOST_STRIPES,
+  hostStripeColors,
   hostStripe,
   panel,
   rr,
@@ -41,7 +39,8 @@ import {
 } from '../canvasKit';
 import type { MusicCue, MusicStyle } from './music';
 import { matchColors } from '../../lib/teamColors';
-import { dominance } from '../../engine';
+import { CONFEDERATIONS, dominance } from '../../engine';
+import { currentEdition } from '../../lib/theme';
 
 export interface RecapOptions {
   format: '16:9' | '9:16';
@@ -54,6 +53,8 @@ export interface RecapOptions {
   title: string;
   subtitle: string;
   credit: string;
+  /** Momentum style in the versus scenes. */
+  momentumView?: 'bars' | 'chart';
 }
 
 export const VIDEO_SIZE: Record<RecapOptions['format'], [number, number]> = { '16:9': [1920, 1080], '9:16': [1080, 1920] };
@@ -81,17 +82,20 @@ interface Scene {
   draw: (c: SC, p: number, t: number, dur: number) => void;
 }
 
-const PAL: Palette = {
-  bg0: '#04070f',
-  bg1: '#14224a',
-  glowA: 'rgba(225,29,46,0.28)',
-  glowB: 'rgba(16,178,108,0.24)',
-  accent: '#f6d77f',
-  ink: '#ffffff',
-  muted: 'rgba(220,228,255,0.7)',
-  panel: 'rgba(8,14,32,0.72)',
-  light: false,
-};
+function editionPalette(): Palette {
+  const c = currentEdition().def.colors;
+  return {
+    bg0: c.night[0],
+    bg1: c.night[4],
+    glowA: hexA(c.primary[0], 0.28),
+    glowB: hexA(c.secondary[0], 0.24),
+    accent: c.accent[1],
+    ink: '#ffffff',
+    muted: 'rgba(220,228,255,0.7)',
+    panel: 'rgba(8,14,32,0.72)',
+    light: false,
+  };
+}
 
 const hexA = (hex: string, a: number) => {
   const n = parseInt(hex.replace('#', ''), 16);
@@ -192,14 +196,56 @@ function drawMomentum(c: SC, x: number, y: number, w: number, h: number, r: Matc
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
   ctx.fillRect(x, mid - 1 * u, w, 2 * u);
   const shown = Math.floor(n * reveal);
-  for (let i = 0; i < shown; i++) {
-    const v = values[i];
-    if (!v) continue;
-    const bh = (Math.abs(v) / 100) * (h / 2 - 4 * u);
-    ctx.fillStyle = v > 0 ? col.home : col.away;
-    rr(ctx, x + i * bw + 1.5 * u, v > 0 ? mid - bh : mid, bw - 3 * u, bh, 3 * u);
-    ctx.fill();
-  }
+  const amp = h / 2 - 4 * u;
+  if (c.o.momentumView === 'chart') {
+    // Smooth area, home colour above the line, away colour below, revealed left to right.
+    const pts = [[x, mid], ...values.map((v, i) => [x + (i + 0.5) * bw, mid - (v / 100) * amp]), [x + w, mid]];
+    const curve = () => {
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i - 1] ?? pts[i];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[i + 2] ?? p2;
+        ctx.bezierCurveTo(p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6, p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6, p2[0], p2[1]);
+      }
+    };
+    const revealW = w * reveal;
+    for (const [side, color] of [[-1, col.home], [1, col.away]] as const) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, side < 0 ? y : mid, revealW, h / 2);
+      ctx.clip();
+      curve();
+      ctx.lineTo(x + w, mid);
+      ctx.lineTo(x, mid);
+      ctx.closePath();
+      const g = ctx.createLinearGradient(0, side < 0 ? y : mid + h / 2, 0, mid);
+      g.addColorStop(0, color);
+      g.addColorStop(1, hexA(color.length === 7 ? color : '#ffffff', 0.25));
+      ctx.fillStyle = g;
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, revealW, h);
+    ctx.clip();
+    curve();
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2.5 * u;
+    ctx.stroke();
+    ctx.restore();
+  } else
+    for (let i = 0; i < shown; i++) {
+      const v = values[i];
+      if (!v) continue;
+      const bh = (Math.abs(v) / 100) * amp;
+      ctx.fillStyle = v > 0 ? col.home : col.away;
+      rr(ctx, x + i * bw + 1.5 * u, v > 0 ? mid - bh : mid, bw - 3 * u, bh, 3 * u);
+      ctx.fill();
+    }
   const d = dominance(values);
   text(ctx, `${d.home}%`, x - 24 * u, mid - 6 * u, { size: 24 * u, weight: 800, color: col.home, align: 'right' });
   text(ctx, `${d.away}%`, x - 24 * u, mid + 26 * u, { size: 24 * u, weight: 800, color: col.away, align: 'right' });
@@ -279,7 +325,7 @@ function versus(c: SC, p: number, t: number, homeId: string, awayId: string, r: 
 
 function confetti(c: SC, t: number, amount = 1) {
   const { ctx, W, H, u } = c;
-  const colors = ['#f6d77f', '#e8b84a', '#ffffff', '#e11d2e', '#10b26c'];
+  const colors = ['#ffffff', ...currentEdition().ring, currentEdition().def.colors.accent[1]];
   ctx.save();
   for (let i = 0; i < 160 * amount; i++) {
     const s = i * 12.9898;
@@ -325,21 +371,22 @@ const introScene = (): Scene => ({
     text(ctx, 'WORLD CUP', W / 2, ey + (portrait ? 170 : 115) * u + 75 * u, { size: 64 * u, weight: 800, spacing: (40 - tp * 26) * u, color: '#fff', align: 'center' });
     ctx.restore();
     const yp = ease.outExpo(seg(p, 0.35, 0.6));
-    const y2030 = ey + (portrait ? 170 : 115) * u + (portrait ? 320 : 290) * u;
+    const y2030 = ey + (portrait ? 170 : 115) * u + (portrait ? 345 : 315) * u;
     if (yp > 0) {
       ctx.save();
       ctx.translate(W / 2, y2030);
       ctx.scale(0.8 + yp * 0.2, 0.8 + yp * 0.2);
-      text(ctx, '2030', 0, 0, { font: 'display', size: (portrait ? 260 : 230) * u, color: goldGradient(ctx, -220 * u, 0), align: 'center', alpha: yp, shadow: true });
+      text(ctx, String(currentEdition().year), 0, 0, { font: 'display', size: (portrait ? 260 : 230) * u, color: goldGradient(ctx, -220 * u, 0), align: 'center', alpha: yp, shadow: true });
       ctx.restore();
     }
     const fp = seg(p, 0.55, 0.8);
     if (fp > 0) {
       const fw = (portrait ? 230 : 200) * u;
       const fh = fw * 0.75;
-      const total = fw * 3 + 60 * u * 2;
+      const total = fw * Math.max(1, c.d.t.hosts.length) + 60 * u * Math.max(0, c.d.t.hosts.length - 1);
       const fy = portrait ? H * 0.76 : H * 0.8;
-      HOST_IDS.forEach((id, i) => {
+      const hosts = c.d.t.hosts;
+      hosts.forEach((id, i) => {
         const a = ease.outCubic(seg(fp, i * 0.2, i * 0.2 + 0.5));
         const fx = W / 2 - total / 2 + i * (fw + 60 * u);
         ctx.save();
@@ -349,7 +396,7 @@ const introScene = (): Scene => ({
       });
     }
     const st = seg(p, 0.7, 0.9);
-    if (st > 0) text(ctx, (c.o.title || 'THE ROAD TO GLORY').toUpperCase(), W / 2, portrait ? H * 0.88 : H * 0.95, { size: 38 * u, weight: 800, spacing: 14 * u, color: c.pal.accent, align: 'center', alpha: st, maxWidth: W - 100 * u });
+    if (st > 0) text(ctx, (c.o.title || currentEdition().def.tagline).toUpperCase(), W / 2, portrait ? H * 0.88 : H * 0.95, { size: 38 * u, weight: 800, spacing: 14 * u, color: c.pal.accent, align: 'center', alpha: st, maxWidth: W - 100 * u });
     // light sweep
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -374,14 +421,15 @@ const teamsScene = (): Scene => ({
     const y0 = title(c, p, '6 confederaciones', '64 selecciones');
     const cols = portrait ? 8 : 16;
     const area = grid(64, cols, 70 * u, y0 + 40 * u, W - 140 * u, (portrait ? H - y0 - 260 * u : H - y0 - 140 * u), 16 * u, 16 * u);
-    TEAMS.forEach((tm, i) => {
+    c.d.t.participants.forEach((id, i) => {
+      const tm = { id };
       const cell = area[i];
       const k = seg(p, 0.1 + (i / 64) * 0.5, 0.2 + (i / 64) * 0.5);
       const r = Math.min(cell.w, cell.h) * 0.42 * ease.outBack(k);
       if (r <= 0.5) return;
       drawFlagCircle(ctx, A.flags[tm.id], cell.x + cell.w / 2, cell.y + cell.h / 2, r, 'rgba(255,255,255,0.5)');
     });
-    const counts = ['UEFA 21', 'CAF 13', 'AFC 12', 'CONMEBOL 8', 'CONCACAF 8', 'OFC 2'].join('   ·   ');
+    const counts = CONFEDERATIONS.map((cf) => `${cf} ${c.d.t.participants.filter((id) => TEAM_BY_ID[id]?.confederation === cf).length}`).filter((x) => !x.endsWith(' 0')).join('   ·   ');
     text(ctx, counts, W / 2, H - (portrait ? 160 : 60) * u, { size: 30 * u, weight: 800, spacing: 3 * u, color: c.pal.muted, align: 'center', alpha: seg(p, 0.5, 0.7), maxWidth: W - 100 * u });
     fadeOut(c, p);
   },
@@ -541,7 +589,7 @@ const versusScene = (stage: KnockoutStage, matchIds: string[]): Scene => ({
     const m = d.ko[matchIds[idx]];
     bg(c, t, m?.winnerId && lp > 0.7 ? hexA(TEAM_BY_ID[m.winnerId].color, 0.3) : undefined);
     const head = stage === 'SF' && n > 1 ? `${STAGE_LABEL[stage]} · ${idx + 1}` : STAGE_LABEL[stage];
-    title(c, lp, stage === 'F' ? 'World Cup 2030' : 'Knockout', head, c.portrait ? 170 * u : 130 * u);
+    title(c, lp, stage === 'F' ? currentEdition().title : 'Knockout', head, c.portrait ? 170 * u : 130 * u);
     if (m?.homeId && m.awayId) versus(c, lp, t, m.homeId, m.awayId, m.result, m.winnerId, stage, stage === 'F');
     else text(c.ctx, 'POR DEFINIR', W / 2, H / 2, { font: 'display', size: 90 * u, align: 'center', color: '#fff' });
     if (lp > 0.93 && idx === n - 1) fadeOut(c, lp);
@@ -746,9 +794,9 @@ const outroScene = (): Scene => ({
     drawTrophy(ctx, A.trophy, W / 2, (portrait ? H * 0.62 : H * 0.7), th);
     const tp = seg(p, 0.25, 0.5);
     const champ = c.o.mode === 'team' ? c.o.teamId : d.champion;
-    text(ctx, 'WORLD CUP 2030', W / 2, portrait ? H * 0.72 : H * 0.8, { font: 'display', size: (portrait ? 130 : 120) * u, color: goldGradient(ctx, H * 0.7, H * 0.8), align: 'center', alpha: tp, shadow: true });
+    text(ctx, currentEdition().title, W / 2, portrait ? H * 0.72 : H * 0.8, { font: 'display', size: (portrait ? 130 : 120) * u, color: goldGradient(ctx, H * 0.7, H * 0.8), align: 'center', alpha: tp, shadow: true });
     text(ctx, (c.o.subtitle || (champ ? `${name(champ)} · ${c.o.mode === 'team' ? 'The Road to Glory' : 'Campeón del mundo'}` : 'The Road to Glory')).toUpperCase(), W / 2, portrait ? H * 0.77 : H * 0.87, { size: 40 * u, weight: 800, spacing: 10 * u, color: '#fff', align: 'center', alpha: seg(p, 0.35, 0.55), maxWidth: W - 100 * u });
-    text(ctx, 'ESPAÑA · PORTUGAL · MAROC', W / 2, portrait ? H * 0.82 : H * 0.92, { size: 28 * u, weight: 800, spacing: 12 * u, color: c.pal.accent, align: 'center', alpha: seg(p, 0.45, 0.65) });
+    text(ctx, currentEdition().hostsLabel, W / 2, portrait ? H * 0.82 : H * 0.92, { size: 28 * u, weight: 800, spacing: 12 * u, color: c.pal.accent, align: 'center', alpha: seg(p, 0.45, 0.65) });
     if (c.o.credit) text(ctx, c.o.credit, W / 2, H - (portrait ? 120 : 40) * u, { size: 24 * u, weight: 600, color: c.pal.muted, align: 'center', alpha: seg(p, 0.55, 0.75), maxWidth: W - 100 * u });
     hostStripe(ctx, 0, H - 10 * u, W * seg(p, 0.3, 0.8), 10 * u);
     const fo = seg(p, 0.9, 1);
@@ -815,7 +863,7 @@ export function buildTimeline(d: DerivedTournament, o: RecapOptions, name: Name,
   }
 
   const u = Math.min(W, H) / 1080;
-  const sc = (ctx: Ctx): SC => ({ ctx, W, H, u, portrait: H > W, A, d, name, pal: PAL, o });
+  const sc = (ctx: Ctx): SC => ({ ctx, W, H, u, portrait: H > W, A, d, name, pal: editionPalette(), o });
   const TRANS = 0.55;
 
   const render = (ctx: Ctx, t: number) => {
@@ -846,7 +894,7 @@ export function buildTimeline(d: DerivedTournament, o: RecapOptions, name: Name,
       ctx.restore();
       // host stripes along the wipe edge
       const sw = 26 * u;
-      HOST_STRIPES.slice(0, 4).forEach((col, k) => {
+      hostStripeColors().slice(0, 4).forEach((col, k) => {
         ctx.save();
         ctx.fillStyle = col;
         ctx.globalAlpha = 0.95;

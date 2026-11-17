@@ -12,3 +12,4 @@ export * from './journey';
 export * from './simulate';
 export * from './validate';
 export * from './momentum';
+export * from './editions';

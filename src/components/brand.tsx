@@ -1,6 +1,7 @@
 import { TEAM_BY_ID } from '../engine';
 import { flagUrlForTeam } from '../lib/flags';
 import { useTeamName } from '../store/tournament';
+import { useEdition } from '../lib/theme';
 import { cx } from './ui';
 
 export function Flag({ id, className, shape = 'rect', title }: { id?: string; className?: string; shape?: 'rect' | 'circle' | 'square'; title?: string }) {
@@ -78,13 +79,15 @@ export function TeamLabel({ id, placeholder, className, flagClass, reverse, bold
   );
 }
 
-/** Original WORLD CUP 2030 emblem: a ring in the hosts' colours around the trophy. */
-export function Emblem({ size = 48, className }: { size?: number; className?: string }) {
+/** Original emblem: a ring in the edition's / hosts' colours around the trophy. */
+export function Emblem({ size = 48, className, ring }: { size?: number; className?: string; ring?: [string, string, string] }) {
+  const ed = useEdition();
+  const colors = ring ?? ed.ring;
   const r = 42;
   const c = 2 * Math.PI * r;
   const seg = c / 3;
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" className={className} aria-label="Emblema World Cup 2030">
+    <svg width={size} height={size} viewBox="0 0 100 100" className={className} aria-label={`Emblema ${ed.title}`}>
       <defs>
         <linearGradient id="emb-gold" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="#fff3c4" />
@@ -98,9 +101,9 @@ export function Emblem({ size = 48, className }: { size?: number; className?: st
       </defs>
       <circle cx="50" cy="50" r="47" fill="url(#emb-bg)" />
       <g transform="rotate(-90 50 50)" fill="none" strokeWidth="7" strokeLinecap="round">
-        <circle cx="50" cy="50" r={r} stroke="#e11d2e" strokeDasharray={`${seg - 7} ${c - seg + 7}`} strokeDashoffset="0" />
-        <circle cx="50" cy="50" r={r} stroke="#ffc400" strokeDasharray={`${seg - 7} ${c - seg + 7}`} strokeDashoffset={-seg} />
-        <circle cx="50" cy="50" r={r} stroke="#10b26c" strokeDasharray={`${seg - 7} ${c - seg + 7}`} strokeDashoffset={-2 * seg} />
+        <circle cx="50" cy="50" r={r} stroke={colors[0]} strokeDasharray={`${seg - 7} ${c - seg + 7}`} strokeDashoffset="0" />
+        <circle cx="50" cy="50" r={r} stroke={colors[1]} strokeDasharray={`${seg - 7} ${c - seg + 7}`} strokeDashoffset={-seg} />
+        <circle cx="50" cy="50" r={r} stroke={colors[2]} strokeDasharray={`${seg - 7} ${c - seg + 7}`} strokeDashoffset={-2 * seg} />
       </g>
       <g transform="translate(31 18) scale(0.19)">
         <path d={TROPHY_BODY} fill="url(#emb-gold)" />
@@ -165,18 +168,35 @@ export function Trophy({ className, glow = true }: { className?: string; glow?: 
   );
 }
 
-/** Fixed cinematic stadium backdrop: night sky, floodlight beams, pitch glow and grain. */
+/** Fixed cinematic stadium backdrop: night sky, floodlight beams, pitch glow, edition motif and grain. */
 export function StadiumBackdrop() {
+  const motif = useEdition().def.colors.motif;
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,#16244a_0%,#070d1c_45%,#04070f_100%)]" />
+      <div className="absolute inset-0" style={{ background: 'radial-gradient(120% 80% at 50% -10%, var(--color-night-700) 0%, var(--color-night-900) 45%, var(--color-night-950) 100%)' }} />
       <div className="absolute -left-[10%] top-[-20%] h-[90vh] w-[38vw] origin-top bg-[linear-gradient(180deg,rgba(255,255,255,0.13),transparent_70%)] blur-2xl [--beam-from:-24deg] [--beam-to:-8deg] animate-beam" />
       <div className="absolute right-[-10%] top-[-20%] h-[90vh] w-[38vw] origin-top bg-[linear-gradient(180deg,rgba(255,255,255,0.11),transparent_70%)] blur-2xl [--beam-from:22deg] [--beam-to:6deg] animate-beam [animation-delay:-4s]" />
-      <div className="absolute left-1/2 top-[-25%] h-[70vh] w-[24vw] -translate-x-1/2 origin-top bg-[linear-gradient(180deg,rgba(232,184,74,0.12),transparent_70%)] blur-3xl" />
-      <div className="absolute inset-x-0 bottom-[-30vh] h-[60vh] bg-[radial-gradient(60%_60%_at_50%_100%,rgba(16,178,108,0.22),transparent_70%)]" />
-      <div className="absolute inset-x-0 bottom-0 h-[38vh] pitch-lines [mask-image:linear-gradient(to_top,black,transparent)] [transform:perspective(600px)_rotateX(55deg)] origin-bottom" />
-      <div className="absolute left-0 top-0 h-[40vh] w-[40vw] bg-[radial-gradient(circle_at_0%_0%,rgba(225,29,46,0.16),transparent_60%)]" />
-      <div className="absolute right-0 top-0 h-[40vh] w-[40vw] bg-[radial-gradient(circle_at_100%_0%,rgba(16,178,108,0.14),transparent_60%)]" />
+      <div className="absolute left-1/2 top-[-25%] h-[70vh] w-[24vw] -translate-x-1/2 origin-top blur-3xl" style={{ background: 'linear-gradient(180deg, color-mix(in srgb, var(--color-gold) 14%, transparent), transparent 70%)' }} />
+      <div className="absolute inset-x-0 bottom-[-30vh] h-[60vh]" style={{ background: 'radial-gradient(60% 60% at 50% 100%, color-mix(in srgb, var(--color-emerald) 24%, transparent), transparent 70%)' }} />
+      {motif === 'iberia' && <div className="absolute inset-x-0 bottom-0 h-[38vh] pitch-lines [mask-image:linear-gradient(to_top,black,transparent)] [transform:perspective(600px)_rotateX(55deg)] origin-bottom" />}
+      {motif === 'desert' && (
+        <>
+          <div className="motif-desert absolute inset-0 opacity-[0.07] [mask-image:radial-gradient(80%_70%_at_50%_30%,black,transparent)]" />
+          <svg className="absolute inset-x-0 bottom-0 h-[26vh] w-full opacity-60" viewBox="0 0 1200 200" preserveAspectRatio="none">
+            <path d="M0 140 C 200 90 340 120 520 100 C 720 78 860 130 1040 96 C 1120 82 1170 92 1200 100 L1200 200 L0 200Z" fill="color-mix(in srgb, var(--color-gold) 18%, transparent)" />
+            <path d="M0 170 C 180 140 380 168 600 150 C 820 132 1000 172 1200 150 L1200 200 L0 200Z" fill="color-mix(in srgb, var(--color-gold-dark) 22%, transparent)" />
+          </svg>
+          <div className="absolute right-[12%] top-[8%] h-28 w-28 rounded-full opacity-25 blur-[2px]" style={{ boxShadow: 'inset -18px 8px 0 0 var(--color-gold-light)' }} />
+        </>
+      )}
+      {motif === 'future' && (
+        <>
+          <div className="motif-future absolute inset-x-0 bottom-0 h-[55vh] [mask-image:linear-gradient(to_top,black,transparent)] [transform:perspective(500px)_rotateX(60deg)] origin-bottom" />
+          <div className="absolute inset-x-0 top-0 h-24 opacity-30 [animation:scan_7s_linear_infinite]" style={{ background: 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-emerald) 20%, transparent), transparent)' }} />
+        </>
+      )}
+      <div className="absolute left-0 top-0 h-[40vh] w-[40vw]" style={{ background: 'radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--color-crimson) 16%, transparent), transparent 60%)' }} />
+      <div className="absolute right-0 top-0 h-[40vh] w-[40vw]" style={{ background: 'radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--color-emerald) 14%, transparent), transparent 60%)' }} />
       <div className="absolute inset-0 opacity-[0.06] mix-blend-overlay [background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22160%22 height=%22160%22><filter id=%22n%22><feTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%222%22/></filter><rect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23n)%22/></svg>')]" />
     </div>
   );

@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react';
-import { DEFAULT_RANKING, DEFAULT_TIEBREAKERS, STAGE_SHORT, TEAMS, TEAM_BY_ID, TIEBREAK_LABEL, type KnockoutStage, type TiebreakCriterion } from '../engine';
+import { useEffect, useRef, useState } from 'react';
+import { ParticipantsEditor } from '../components/Participants';
+import { MomentumViewToggle } from '../components/Momentum';
+import { DEFAULT_TIEBREAKERS, EDITIONS, EDITION_IDS, STAGE_SHORT, TEAM_BY_ID, TIEBREAK_LABEL, rankingFor, type EditionId, type KnockoutStage, type TiebreakCriterion } from '../engine';
 import { Flag } from '../components/brand';
 import { Icon } from '../components/Icon';
-import { Button, Card, Chip, cx, IconButton, SectionHeader, TextInput, Toggle } from '../components/ui';
+import { Button, Card, Chip, cx, IconButton, Select, SectionHeader, TextInput, Toggle } from '../components/ui';
 import { downloadBlob, slugify } from '../lib/download';
 import { useStore } from '../store/tournament';
 import { persistence } from '../store/persistence';
@@ -10,13 +12,17 @@ import { confirmDialog, toast } from '../store/ui';
 
 const ALL_CRITERIA: TiebreakCriterion[] = ['points', 'goalDiff', 'goalsFor', 'h2hPoints', 'h2hGoalDiff', 'h2hGoalsFor', 'wins', 'fairPlay', 'lots'];
 
-export default function Settings() {
+export default function Settings({ param }: { param?: string }) {
+  useEffect(() => {
+    if (param === 'participantes') setTimeout(() => document.getElementById('participantes')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+  }, [param]);
   return (
     <div className="space-y-6">
       <SectionHeader eyebrow="Settings · Ajustes" title="Settings" subtitle="Gestioná tus simulaciones, los criterios del torneo y las preferencias. Todo se guarda automáticamente en este navegador." />
       <div className="grid gap-5 xl:grid-cols-2">
         <TournamentCard />
         <SavedTournaments />
+        <ParticipantsEditor />
         <DataCard />
         <Preferences />
         <Tiebreakers />
@@ -40,6 +46,14 @@ function TournamentCard() {
           <TextInput className="flex-1" label="Nombre de la simulación" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
           <Button className="mt-6" variant="outline" disabled={!name.trim() || name === t.name} onClick={() => commit((x) => ({ ...x, name: name.trim() }), { label: 'Renombrar torneo' })}>Guardar</Button>
         </div>
+        <Select
+          label="Mundial (edición y temática)"
+          value={t.edition}
+          onChange={(v: EditionId) =>
+            commit((x) => ({ ...x, edition: v, hosts: EDITIONS[v].hostsEditable ? x.hosts : EDITIONS[v].defaultHosts.filter((h) => x.participants.includes(h)) }), { label: `Cambiar a ${v}` })
+          }
+          options={EDITION_IDS.map((id) => ({ value: id, label: `${EDITIONS[id].title} · ${EDITIONS[id].theme}` }))}
+        />
         <label className="block">
           <span className="label mb-1.5 block">Inicio del torneo (cuenta regresiva)</span>
           <input type="datetime-local" value={t.kickoff.slice(0, 16)} onChange={(e) => e.target.value && commit((x) => ({ ...x, kickoff: e.target.value }), { label: 'Cambiar fecha' })} className="h-11 w-full rounded-xl border border-white/10 bg-night-950/60 px-3 text-sm outline-none [color-scheme:dark] focus:border-gold/60" />
@@ -183,6 +197,13 @@ function Preferences() {
         <span className="w-10 text-right text-sm tabular text-white/60">{Math.round(prefs.volume * 100)}%</span>
       </label>
       <Toggle checked={prefs.animations} onChange={(v) => setPrefs({ animations: v })} label="Animaciones y celebraciones" description="Celebraciones de victoria, clasificación, transiciones de fase y animación de campeón." />
+      <div className="flex items-center justify-between gap-3 py-2">
+        <span>
+          <span className="block text-sm font-medium text-white">Vista del momentum</span>
+          <span className="block text-xs text-white/50">Barras de dominio o gráfico de área. También se usa en el vídeo.</span>
+        </span>
+        <MomentumViewToggle />
+      </div>
     </Card>
   );
 }
@@ -244,7 +265,7 @@ function Ranking() {
       <div className="mb-1 flex items-center justify-between">
         <h2 className="font-display text-2xl uppercase">Ranking personalizado</h2>
         <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => set(DEFAULT_RANKING.slice())}>Restablecer</Button>
+          <Button size="sm" variant="ghost" onClick={() => set(rankingFor(t.participants))}>Restablecer</Button>
           <Button size="sm" variant="outline" onClick={() => setOpen((v) => !v)}>{open ? 'Ocultar' : 'Editar'}</Button>
         </div>
       </div>
@@ -287,7 +308,7 @@ function TeamNames() {
   const t = useStore((s) => s.t);
   const commit = useStore((s) => s.commit);
   const [q, setQ] = useState('');
-  const list = TEAMS.filter((x) => !q || x.name.toLowerCase().includes(q.toLowerCase()) || (t.teamNames[x.id] ?? '').toLowerCase().includes(q.toLowerCase()));
+  const list = t.participants.map((id) => TEAM_BY_ID[id]).filter((x) => !q || x.name.toLowerCase().includes(q.toLowerCase()) || (t.teamNames[x.id] ?? '').toLowerCase().includes(q.toLowerCase()));
   const setName = (id: string, v: string) =>
     commit((x) => {
       const teamNames = { ...x.teamNames };

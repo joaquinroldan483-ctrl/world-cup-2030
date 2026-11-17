@@ -3,7 +3,8 @@ import { BRACKET, type BracketSlot, type Source } from './knockout';
 import { uid } from './random';
 import { computeGroupTable, type GroupTable } from './standings';
 import { resolveOutcome, type Outcome } from './results';
-import { DEFAULT_RANKING, TEAMS } from './teams';
+import { DEFAULT_PARTICIPANTS, DEFAULT_RANKING, TEAM_BY_ID } from './teams';
+import { EDITIONS, type EditionId } from './editions';
 import {
   DEFAULT_TIEBREAKERS,
   GROUP_LETTERS,
@@ -14,16 +15,28 @@ import {
 
 export const DEFAULT_KICKOFF = '2030-06-13T19:00';
 
-export function createTournament(name = 'Mi Mundial 2030'): Tournament {
+/** Ranking restricted to the participants, keeping the default order and appending newcomers. */
+export function rankingFor(participants: string[], base: string[] = DEFAULT_RANKING): string[] {
+  const inBase = base.filter((id) => participants.includes(id));
+  return [...inBase, ...participants.filter((id) => !inBase.includes(id))];
+}
+
+export function createTournament(name?: string, edition: EditionId = '2030'): Tournament {
   const now = Date.now();
+  const ed = EDITIONS[edition];
+  const participants = DEFAULT_PARTICIPANTS.slice();
   return {
     id: uid('t_'),
-    name,
+    name: name ?? `Mi Mundial ${ed.year}`,
+    edition,
+    participants,
+    hosts: ed.defaultHosts.filter((h) => participants.includes(h)),
+    groupOverrides: {},
     createdAt: now,
     updatedAt: now,
     schema: 1,
     teamNames: {},
-    ranking: DEFAULT_RANKING.slice(),
+    ranking: rankingFor(participants),
     drawConfig: structuredClone(DEFAULT_DRAW_CONFIG),
     groups: null,
     drawSteps: [],
@@ -31,11 +44,55 @@ export function createTournament(name = 'Mi Mundial 2030'): Tournament {
     results: {},
     tiebreakers: DEFAULT_TIEBREAKERS.slice(),
     seed: uid('s'),
-    kickoff: DEFAULT_KICKOFF,
+    kickoff: ed.kickoff,
   };
 }
 
-export const ALL_TEAM_IDS = TEAMS.map((t) => t.id);
+/** Default participants (kept for the engine tests and the 2030 configuration). */
+export const ALL_TEAM_IDS = DEFAULT_PARTICIPANTS;
+
+/** Fills fields added in later versions so older saved tournaments keep working. */
+export function migrateTournament(t: Tournament): Tournament {
+  const edition: EditionId = t.edition && EDITIONS[t.edition] ? t.edition : '2030';
+  const participants =
+    Array.isArray(t.participants) && t.participants.length === 64 && new Set(t.participants).size === 64 && t.participants.every((id) => TEAM_BY_ID[id])
+      ? t.participants
+      : DEFAULT_PARTICIPANTS.slice();
+  const hosts = Array.isArray(t.hosts) ? t.hosts.filter((h) => participants.includes(h)) : EDITIONS[edition].defaultHosts.filter((h) => participants.includes(h));
+  const ranking = Array.isArray(t.ranking) && t.ranking.length === 64 && t.ranking.every((id) => participants.includes(id)) ? t.ranking : rankingFor(participants, t.ranking);
+  return { ...t, edition, participants, hosts, ranking, groupOverrides: t.groupOverrides && typeof t.groupOverrides === 'object' ? t.groupOverrides : {} };
+}
+
+/**
+ * Replaces a participant with another national team everywhere: list, ranking, groups, draw log and hosts.
+ * Results of matches involving the replaced team are removed (they no longer apply).
+ */
+export function replaceParticipant(t: Tournament, oldId: string, newId: string): Tournament {
+  if (!t.participants.includes(oldId)) throw new Error('La selección a reemplazar no participa.');
+  if (t.participants.includes(newId)) throw new Error('Esa selección ya participa.');
+  if (!TEAM_BY_ID[newId]) throw new Error('Selección desconocida.');
+  const swap = (id: string) => (id === oldId ? newId : id);
+  const results = Object.fromEntries(Object.entries(t.results).filter(([, r]) => r.homeId !== oldId && r.awayId !== oldId));
+  const groupOverrides = Object.fromEntries(Object.entries(t.groupOverrides ?? {}).map(([k, v]) => [k, v.map(swap)]));
+  const teamNames = { ...t.teamNames };
+  delete teamNames[oldId];
+  return {
+    ...t,
+    participants: t.participants.map(swap),
+    ranking: t.ranking.map(swap),
+    hosts: t.hosts.map(swap),
+    groups: t.groups ? t.groups.map((g) => g.map(swap)) : null,
+    drawSteps: t.drawSteps.map((s) => ({ ...s, teamId: swap(s.teamId) })),
+    groupOverrides,
+    teamNames,
+    results,
+  };
+}
+
+/** Number of saved results that involve a team. */
+export function resultsOfTeam(t: Tournament, teamId: string): number {
+  return Object.values(t.results).filter((r) => r.homeId === teamId || r.awayId === teamId).length;
+}
 
 export interface GroupView {
   index: number;
@@ -84,14 +141,14 @@ export function deriveTournament(t: Tournament): DerivedTournament {
     index,
     letter: GROUP_LETTERS[index],
     teamIds,
-    table: computeGroupTable(index, teamIds, t.results, t.tiebreakers, t.seed),
+    table: computeGroupTable(index, teamIds, t.results, t.tiebreakers, t.seed, t.groupOverrides?.[index]),
   }));
 
   const ko: Record<string, KOMatchView> = {};
   const resolve = (src: Source): string | undefined => {
     if (src.kind === 'group') {
       const g = groups[src.group];
-      if (!g || !g.table.complete) return undefined;
+      if (!g || !(g.table.complete || g.table.manual)) return undefined;
       return g.table.rows[src.position - 1]?.teamId;
     }
     const m = ko[src.matchId];
@@ -118,9 +175,8 @@ export function deriveTournament(t: Tournament): DerivedTournament {
 
   const knockout = BRACKET.map((s) => ko[s.id]);
   const groupPlayed = groups.reduce((n, g) => n + g.table.played, 0);
-  const qualified = groups.every((g) => g.table.complete)
-    ? groups.flatMap((g) => g.table.rows.slice(0, 2).map((r) => r.teamId))
-    : groups.flatMap((g) => (g.table.complete ? g.table.rows.slice(0, 2).map((r) => r.teamId) : []));
+  const decided = (g: GroupView) => g.table.complete || g.table.manual;
+  const qualified = groups.flatMap((g) => (decided(g) ? g.table.rows.slice(0, 2).map((r) => r.teamId) : []));
 
   return {
     t,
@@ -138,7 +194,7 @@ export function deriveTournament(t: Tournament): DerivedTournament {
       groupTotal: groups.length * 6 || 96,
       koPlayed: knockout.filter((m) => m.winnerId).length,
       koTotal: knockout.length,
-      groupsComplete: groups.filter((g) => g.table.complete).length,
+      groupsComplete: groups.filter(decided).length,
     },
   };
 }
