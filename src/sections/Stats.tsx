@@ -40,7 +40,7 @@ export default function Stats() {
       <SectionHeader eyebrow="Statistics · Estadísticas" title="Statistics" accent="emerald" subtitle="Todo se calcula automáticamente a partir de los resultados y acontecimientos cargados." />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <KPI label="Partidos" value={s.matches} sub="de 128" />
+        <KPI label="Partidos" value={s.matches} sub={`de ${d.progress.groupTotal + d.progress.koTotal}`} />
         <KPI label="Goles" value={s.goals} accent />
         <KPI label="Promedio" value={s.avgGoals.toFixed(2)} sub="goles por partido" />
         <KPI label="Prórrogas" value={s.extraTimeMatches} />
@@ -165,7 +165,7 @@ export default function Stats() {
 
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 px-5 pt-5">
-          <div className="label">Las 64 selecciones · todo el torneo</div>
+          <div className="label">Las {d.t.format} selecciones · todo el torneo</div>
           <span className="text-[11px] text-white/40">Los partidos definidos por penales cuentan como empate.</span>
         </div>
         <div className="overflow-x-auto p-5 pt-3">

@@ -305,7 +305,8 @@ function detectCelebrations(before: DerivedTournament, after: DerivedTournament,
       out.push({ kind: 'match', matchId: m.id });
   }
   if (newly.length && opts.celebrate === 'match') out.push({ kind: 'qualified', teamIds: newly });
-  if (before.progress.groupsComplete < 16 && after.progress.groupsComplete === 16) out.push({ kind: 'phase', stage: 'GROUPS_DONE' });
+  const G = after.progress.groupCount;
+  if (before.progress.groupsComplete < G && after.progress.groupsComplete === G && before.progress.groupCount === G) out.push({ kind: 'phase', stage: 'GROUPS_DONE' });
   for (const stage of ['R32', 'R16', 'QF', 'SF'] as KnockoutStage[]) {
     const done = (d: DerivedTournament) => stageMatches(d, stage).every((m) => m.winnerId);
     if (!done(before) && done(after)) out.push({ kind: 'phase', stage });

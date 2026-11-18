@@ -3,6 +3,8 @@ import {
   CATALOG,
   CONFEDERATIONS,
   DEFAULT_PARTICIPANTS,
+  FORMATS,
+  defaultParticipants,
   EDITIONS,
   TEAM_BY_ID,
   rankingFor,
@@ -18,7 +20,7 @@ import { Button, Card, Chip, cx, Modal } from './ui';
 
 const MAX_HOSTS = 4;
 
-/** Edit the 64 participating teams (and, in 2038, the hosts). */
+/** Edit the participating teams (and, in 2038, the hosts). */
 export function ParticipantsEditor() {
   const t = useStore((s) => s.t);
   const commit = useStore((s) => s.commit);
@@ -66,16 +68,17 @@ export function ParticipantsEditor() {
   const resetList = async () => {
     const ok = await confirmDialog({
       title: 'Restablecer participantes',
-      message: 'Vuelve la lista original de 64 selecciones. Se borrarán el sorteo y los resultados si la lista cambia. Podés deshacerlo.',
+      message: `Vuelve la lista por defecto de ${t.format} selecciones. Se borrarán el sorteo y los resultados si la lista cambia. Podés deshacerlo.`,
       confirmLabel: 'Restablecer',
       danger: true,
     });
     if (!ok) return;
     await commit(
       (x) => {
-        const same = x.participants.every((id) => DEFAULT_PARTICIPANTS.includes(id));
+        const def0 = x.format === 64 ? DEFAULT_PARTICIPANTS.slice() : defaultParticipants(x.format, def.hostsEditable ? x.hosts : def.defaultHosts);
+        const same = x.participants.every((id) => def0.includes(id));
         if (same) return x;
-        const participants = DEFAULT_PARTICIPANTS.slice();
+        const participants = def0;
         return {
           ...x,
           participants,
@@ -97,8 +100,9 @@ export function ParticipantsEditor() {
       <div id="participantes" className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-display text-2xl uppercase">Selecciones participantes · {def.year}</h2>
+          <div className="mt-0.5 text-sm text-gold-light">{FORMATS[t.format].label} · {FORMATS[t.format].description} <span className="text-white/40">(se cambia arriba, en Torneo activo)</span></div>
           <p className="mt-1 max-w-2xl text-xs text-white/45">
-            Cambiá cualquiera de las 64 clasificadas por otra selección del catálogo ({CATALOG.length} disponibles). El reemplazo toma su lugar en el ranking y, si ya hubo sorteo, en su mismo grupo.
+            Cambiá cualquiera de las {t.format} clasificadas por otra selección del catálogo ({CATALOG.length} disponibles). El reemplazo toma su lugar en el ranking y, si ya hubo sorteo, en su mismo grupo.
             {def.hostsEditable ? ' Tocá la estrella para elegir los anfitriones (hasta 4).' : ' Los anfitriones de esta edición son fijos.'}
           </p>
         </div>

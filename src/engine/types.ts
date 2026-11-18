@@ -173,7 +173,9 @@ export interface Tournament {
   name: string;
   /** World Cup edition (theme, hosts, default dates). */
   edition: import('./editions').EditionId;
-  /** The 64 participating team ids. */
+  /** Number of participating teams (16, 24, 32, 48 or 64). */
+  format: import('./formats').TeamCount;
+  /** The participating team ids (as many as the format). */
   participants: string[];
   /** Host team ids (seeded as heads of groups A, B, C…). */
   hosts: string[];
@@ -187,7 +189,7 @@ export interface Tournament {
   /** Custom ranking (ordered team ids) used for pots and auto-simulation strength. */
   ranking: string[];
   drawConfig: DrawConfig;
-  /** 16 groups × 4 team ids, or null if the draw has not been confirmed. */
+  /** Groups × 4 team ids, or null if the draw has not been confirmed. */
   groups: string[][] | null;
   /** Extraction order of the confirmed draw. */
   drawSteps: DrawStep[];

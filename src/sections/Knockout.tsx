@@ -9,6 +9,7 @@ import {
   simulatePending,
   sortEvents,
   stageMatches,
+  stagesOf,
   totals,
   type KnockoutStage,
   type KOMatchView,
@@ -30,8 +31,7 @@ const CENTER_W = 260;
 
 type Pos = { x: number; y: number };
 
-const COL_LABELS = ['16avos', 'Octavos', 'Cuartos', 'Semis', '', 'Semis', 'Cuartos', 'Octavos', '16avos'];
-const colLeft = (i: number) => (i < 4 ? i * (CARD_W + COL_GAP) : i === 4 ? 4 * (CARD_W + COL_GAP) : 4 * (CARD_W + COL_GAP) + CENTER_W + (i - 5) * (CARD_W + COL_GAP) + COL_GAP);
+const SHORT: Partial<Record<KnockoutStage, string>> = { R32: '16avos', R16: 'Octavos', QF: 'Cuartos', SF: 'Semis' };
 
 function matchLabel(m: KOMatchView) {
   return m.stage === 'F' || m.stage === '3P' ? STAGE_LABEL[m.stage] : `${STAGE_LABEL[m.stage]} · Partido ${m.index}`;
@@ -51,8 +51,8 @@ export default function Knockout() {
     setEditor({ matchId: m.id, stage: m.stage, homeId: m.homeId, awayId: m.awayId, label: matchLabel(m) });
   };
 
-  const current = (['R32', 'R16', 'QF', 'SF', 'F'] as KnockoutStage[]).find((s) => stageMatches(d, s).some((m) => !m.winnerId && m.homeId && m.awayId));
-  const groupsDone = d.progress.groupsComplete === 16;
+  const current = stagesOf(d.t.format).filter((x) => x !== '3P').find((s) => stageMatches(d, s).some((m) => !m.winnerId && m.homeId && m.awayId));
+  const groupsDone = d.progress.groupsComplete === d.progress.groupCount;
 
   const simulate = async (scope: 'stage' | 'all') => {
     const ok = await confirmDialog({
@@ -95,7 +95,7 @@ export default function Knockout() {
       {d.knockout.some((m) => m.stale) && (
         <Card className="mb-5 border-crimson/40 p-4 text-sm text-crimson-light">Hay resultados que ya no corresponden a los cruces actuales; se ignoran hasta que los vuelvas a cargar.</Card>
       )}
-      {view === 'bracket' ? <Bracket onOpen={open} /> : <Rounds onOpen={open} initial={current ?? 'R32'} />}
+      {view === 'bracket' ? <Bracket onOpen={open} /> : <Rounds onOpen={open} initial={current ?? stagesOf(d.t.format)[0]} />}
       <MatchEditor target={editor} onClose={() => setEditor(null)} />
     </div>
   );
@@ -103,14 +103,16 @@ export default function Knockout() {
 
 /* --------------------------------------------------------------- BRACKET */
 
-function useLayout() {
+/** Symmetric bracket layout for 2, 3 or 4 rounds per side (8, 16 or 32 teams). */
+function useLayout(rounds: KnockoutStage[]) {
   return useMemo(() => {
+    const D = rounds.length; // columns per side, ending with the semifinal
+    const firstPer = 2 ** (D - 1); // first-round matches per side
     const pos: Record<string, Pos> = {};
     const colX = (side: 'left' | 'right', depth: number) =>
-      side === 'left' ? depth * (CARD_W + COL_GAP) : 4 * (CARD_W + COL_GAP) + CENTER_W + (3 - depth) * (CARD_W + COL_GAP) + COL_GAP;
-    const stages: KnockoutStage[] = ['R32', 'R16', 'QF', 'SF'];
-    stages.forEach((s, depth) => {
-      const per = 8 / 2 ** depth; // matches per side
+      side === 'left' ? depth * (CARD_W + COL_GAP) : D * (CARD_W + COL_GAP) + CENTER_W + (D - 1 - depth) * (CARD_W + COL_GAP) + COL_GAP;
+    rounds.forEach((s, depth) => {
+      const per = firstPer / 2 ** depth;
       for (const side of ['left', 'right'] as const) {
         for (let i = 0; i < per; i++) {
           const index = side === 'left' ? i + 1 : per + i + 1;
@@ -121,18 +123,23 @@ function useLayout() {
         }
       }
     });
-    const height = 8 * (CARD_H + GAP_Y) - GAP_Y;
-    const width = 8 * (CARD_W + COL_GAP) + CENTER_W + COL_GAP;
-    const cx = 4 * (CARD_W + COL_GAP) + (CENTER_W + COL_GAP) / 2 - 2;
+    const height = Math.max(firstPer * (CARD_H + GAP_Y) - GAP_Y, 420);
+    const width = 2 * D * (CARD_W + COL_GAP) + CENTER_W + COL_GAP;
+    const cx = D * (CARD_W + COL_GAP) + (CENTER_W + COL_GAP) / 2 - 2;
     pos.F = { x: cx - 110, y: height / 2 - 70 };
     pos['3P'] = { x: cx - 92, y: height / 2 + 120 };
-    return { pos, width, height };
-  }, []);
+    const labels = [...rounds, null, ...rounds.slice().reverse()].map((st, i) => ({
+      text: st ? SHORT[st] ?? '' : '',
+      left: i < D ? i * (CARD_W + COL_GAP) : i === D ? D * (CARD_W + COL_GAP) : colX('right', 2 * D - i),
+    }));
+    return { pos, width, height, labels };
+  }, [rounds]);
 }
 
 function Bracket({ onOpen }: { onOpen: (m: KOMatchView) => void }) {
   const d = useDerived();
-  const { pos, width, height } = useLayout();
+  const rounds = useMemo(() => stagesOf(d.t.format).filter((x) => x !== '3P' && x !== 'F'), [d.t.format]);
+  const { pos, width, height, labels } = useLayout(rounds);
   const wrap = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(1);
   const [zoom, setZoom] = useState<number | null>(null);
@@ -146,7 +153,7 @@ function Bracket({ onOpen }: { onOpen: (m: KOMatchView) => void }) {
   const scale = zoom ?? fit;
 
   const lines = d.knockout
-    .filter((m) => m.stage !== 'R32' && m.stage !== '3P' && m.stage !== 'F')
+    .filter((m) => m.stage !== rounds[0] && m.stage !== '3P' && m.stage !== 'F')
     .flatMap((m) => [m.home, m.away].map((src) => (src.kind === 'winner' ? { from: src.matchId, to: m.id } : null)))
     .filter(Boolean) as { from: string; to: string }[];
   lines.push({ from: 'SF-1', to: 'F' }, { from: 'SF-2', to: 'F' });
@@ -182,9 +189,9 @@ function Bracket({ onOpen }: { onOpen: (m: KOMatchView) => void }) {
                 return <path key={from + to} d={`M${x1} ${y1} H${mx} V${y2} H${x2}`} fill="none" stroke={active ? 'url(#ln)' : 'rgba(255,255,255,0.12)'} strokeWidth={active ? 2 : 1.5} />;
               })}
             </svg>
-            {COL_LABELS.map((l, i) => (
-              <div key={i} className="absolute text-center font-cond text-[12px] font-bold uppercase tracking-[0.2em] text-white/40" style={{ left: colLeft(i), top: -30, width: i === 4 ? CENTER_W : CARD_W }}>
-                {l}
+            {labels.map((l, i) => (
+              <div key={i} className="absolute text-center font-cond text-[12px] font-bold uppercase tracking-[0.2em] text-white/40" style={{ left: l.left, top: -30, width: CARD_W }}>
+                {l.text}
               </div>
             ))}
             {d.knockout
@@ -281,7 +288,7 @@ function Rounds({ onOpen, initial }: { onOpen: (m: KOMatchView) => void; initial
   const matches = stage === 'F' ? [d.ko.F, d.ko['3P']] : stageMatches(d, stage);
   return (
     <div>
-      <Segmented className="mb-4" value={stage} onChange={setStage} options={ROUND_TABS.map((t) => ({ ...t, label: `${t.label} ${stageMatches(d, t.value).filter((m) => m.winnerId).length}/${stageMatches(d, t.value).length + (t.value === 'F' ? 1 : 0)}` }))} />
+      <Segmented className="mb-4" value={stage} onChange={setStage} options={ROUND_TABS.filter((x) => stagesOf(d.t.format).includes(x.value)).map((t) => ({ ...t, label: `${t.label} ${stageMatches(d, t.value).filter((m) => m.winnerId).length}/${stageMatches(d, t.value).length + (t.value === 'F' ? 1 : 0)}` }))} />
       <motion.div key={stage} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
         {matches.map((m) => (
           <RoundCard key={m.id} m={m} onOpen={onOpen} />

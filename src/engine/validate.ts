@@ -2,7 +2,8 @@ import { DEFAULT_DRAW_CONFIG } from './draw';
 import { TEAM_BY_ID, DEFAULT_RANKING } from './teams';
 import { createTournament, migrateTournament } from './tournament';
 import { EDITIONS } from './editions';
-import { CONFEDERATIONS, DEFAULT_TIEBREAKERS, GROUP_COUNT, TEAMS_PER_GROUP, type MatchResult, type TiebreakCriterion, type Tournament } from './types';
+import { FORMATS, isTeamCount } from './formats';
+import { CONFEDERATIONS, DEFAULT_TIEBREAKERS, TEAMS_PER_GROUP, type MatchResult, type TiebreakCriterion, type Tournament } from './types';
 import { EVENT_TYPES } from './results';
 
 export class ImportError extends Error {}
@@ -17,11 +18,13 @@ export function parseTournament(input: unknown): Tournament {
   if (!isObj(raw)) throw new ImportError('El archivo no contiene un torneo válido.');
   if (raw.schema !== 1) throw new ImportError('Versión de archivo no compatible.');
   const edition = typeof raw.edition === 'string' && raw.edition in EDITIONS ? (raw.edition as Tournament['edition']) : '2030';
-  const base = createTournament(typeof raw.name === 'string' ? raw.name.slice(0, 80) : 'Torneo importado', edition);
+  const teams = isTeamCount(raw.format) ? raw.format : 64;
+  const GROUP_COUNT = FORMATS[teams].groups;
+  const base = createTournament(typeof raw.name === 'string' ? raw.name.slice(0, 80) : 'Torneo importado', edition, teams);
 
   let groups: string[][] | null = null;
   if (Array.isArray(raw.groups)) {
-    if (raw.groups.length !== GROUP_COUNT) throw new ImportError('El torneo debe tener 16 grupos.');
+    if (raw.groups.length !== GROUP_COUNT) throw new ImportError(`El torneo debe tener ${GROUP_COUNT} grupos.`);
     groups = raw.groups.map((g, i) => {
       if (!Array.isArray(g) || g.length !== TEAMS_PER_GROUP) throw new ImportError(`El grupo ${i + 1} no tiene 4 selecciones.`);
       return g.map((id) => {
@@ -29,7 +32,7 @@ export function parseTournament(input: unknown): Tournament {
         return id;
       });
     });
-    if (new Set(groups.flat()).size !== 64) throw new ImportError('Hay selecciones repetidas en los grupos.');
+    if (new Set(groups.flat()).size !== teams) throw new ImportError('Hay selecciones repetidas en los grupos.');
     if (Array.isArray(raw.participants) && !groups.flat().every((id) => (raw.participants as string[]).includes(id)))
       throw new ImportError('Los grupos no coinciden con la lista de participantes.');
   }
@@ -69,7 +72,7 @@ export function parseTournament(input: unknown): Tournament {
   }
 
   const participants = Array.isArray(raw.participants) ? (raw.participants as string[]) : groups ? groups.flat() : base.participants;
-  const ranking = Array.isArray(raw.ranking) && raw.ranking.length === 64 && new Set(raw.ranking).size === 64 && raw.ranking.every((id) => TEAM_BY_ID[id as string])
+  const ranking = Array.isArray(raw.ranking) && raw.ranking.length === teams && new Set(raw.ranking).size === teams && raw.ranking.every((id) => TEAM_BY_ID[id as string])
     ? (raw.ranking as string[])
     : DEFAULT_RANKING.slice();
   const tiebreakers = Array.isArray(raw.tiebreakers) && raw.tiebreakers.every((c) => DEFAULT_TIEBREAKERS.includes(c as TiebreakCriterion) || c === 'wins')

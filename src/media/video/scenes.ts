@@ -10,6 +10,7 @@ import {
   isGoal,
   sortEvents,
   stageMatches,
+  stagesOf,
   totals,
   type DerivedTournament,
   type JourneyStep,
@@ -419,12 +420,13 @@ const teamsScene = (): Scene => ({
     const { ctx, W, H, u, A, portrait } = c;
     bg(c, t);
     const y0 = title(c, p, '6 confederaciones', '64 selecciones');
-    const cols = portrait ? 8 : 16;
+    const N = c.d.t.participants.length;
+    const cols = portrait ? (N > 32 ? 8 : N > 16 ? 6 : 4) : N > 32 ? 16 : N > 16 ? 8 : 8;
     const area = grid(64, cols, 70 * u, y0 + 40 * u, W - 140 * u, (portrait ? H - y0 - 260 * u : H - y0 - 140 * u), 16 * u, 16 * u);
     c.d.t.participants.forEach((id, i) => {
       const tm = { id };
       const cell = area[i];
-      const k = seg(p, 0.1 + (i / 64) * 0.5, 0.2 + (i / 64) * 0.5);
+      const k = seg(p, 0.1 + (i / N) * 0.5, 0.2 + (i / N) * 0.5);
       const r = Math.min(cell.w, cell.h) * 0.42 * ease.outBack(k);
       if (r <= 0.5) return;
       drawFlagCircle(ctx, A.flags[tm.id], cell.x + cell.w / 2, cell.y + cell.h / 2, r, 'rgba(255,255,255,0.5)');
@@ -443,10 +445,11 @@ const drawScene = (): Scene => ({
     const { ctx, W, H, u, A, d, portrait } = c;
     bg(c, t);
     const y0 = title(c, p, 'Draw Ceremony', 'El sorteo');
-    const cols = portrait ? 4 : 8;
-    const cells = grid(16, cols, 60 * u, y0 + 30 * u, W - 120 * u, H - y0 - (portrait ? 160 : 70) * u, 16 * u, 16 * u);
+    const G = d.groups.length;
+    const cols = portrait ? (G > 8 ? 4 : 2) : Math.min(8, Math.ceil(G / 2));
+    const cells = grid(G, cols, 60 * u, y0 + 30 * u, W - 120 * u, H - y0 - (portrait ? 160 : 70) * u, 16 * u, 16 * u);
     d.groups.forEach((g, gi) => {
-      const k = ease.outCubic(seg(p, 0.12 + gi * 0.035, 0.22 + gi * 0.035));
+      const k = ease.outCubic(seg(p, 0.12 + gi * (0.56 / G), 0.22 + gi * (0.56 / G)));
       if (k <= 0) return;
       const cell = cells[gi];
       ctx.save();
@@ -474,9 +477,10 @@ const groupStageScene = (): Scene => ({
   draw: (c, p, t) => {
     const { ctx, W, H, u, A, d, name, portrait } = c;
     bg(c, t);
-    const y0 = title(c, p, '96 partidos · 16 grupos', 'Fase de grupos');
-    const page = Math.min(3, Math.floor(p * 4));
-    const pp = p * 4 - page;
+    const pages = Math.ceil(d.groups.length / 4);
+    const y0 = title(c, p, `${d.groups.length * 6} partidos · ${d.groups.length} grupos`, 'Fase de grupos');
+    const page = Math.min(pages - 1, Math.floor(p * pages));
+    const pp = p * pages - page;
     const groups = d.groups.slice(page * 4, page * 4 + 4);
     const cells = grid(4, portrait ? 1 : 4, 60 * u, y0 + 40 * u, W - 120 * u, H - y0 - (portrait ? 140 : 90) * u, 24 * u, 20 * u);
     const inA = ease.outCubic(seg(pp, 0, 0.2));
@@ -485,7 +489,7 @@ const groupStageScene = (): Scene => ({
       const cell = cells[i];
       const k = ease.outCubic(seg(pp, i * 0.05, 0.2 + i * 0.05));
       ctx.save();
-      ctx.globalAlpha = Math.min(k, page === 3 ? 1 : outA) * inA;
+      ctx.globalAlpha = Math.min(k, page === pages - 1 ? 1 : outA) * inA;
       ctx.translate((1 - k) * 80 * u, 0);
       panel(ctx, cell.x, cell.y, cell.w, cell.h, 18 * u, c.pal);
       text(ctx, `GRUPO ${g.letter}`, cell.x + 20 * u, cell.y + 46 * u, { font: 'display', size: 38 * u, color: '#f6d77f' });
@@ -540,11 +544,12 @@ const qualifiedScene = (): Scene => ({
   draw: (c, p, t) => {
     const { ctx, W, H, u, A, d, portrait } = c;
     bg(c, t);
-    const y0 = title(c, p, 'Rumbo a dieciseisavos', 'Los 32 clasificados');
+    const Q = d.qualified.length;
+    const y0 = title(c, p, `Rumbo a ${STAGE_LABEL[stagesOf(d.t.format)[0]].toLowerCase()}`, `Los ${Q} clasificados`);
     const cols = portrait ? 4 : 8;
-    const cells = grid(32, cols, 80 * u, y0 + 30 * u, W - 160 * u, H - y0 - (portrait ? 150 : 60) * u, 14 * u, 10 * u);
+    const cells = grid(Q, cols, 80 * u, y0 + 30 * u, W - 160 * u, H - y0 - (portrait ? 150 : 60) * u, 14 * u, 10 * u);
     d.qualified.forEach((id, i) => {
-      const k = ease.outBack(seg(p, 0.12 + i * 0.012, 0.25 + i * 0.012));
+      const k = ease.outBack(seg(p, 0.12 + i * (0.38 / Q), 0.25 + i * (0.38 / Q)));
       const cell = cells[i];
       const r = Math.min(cell.w * 0.3, cell.h * 0.34) * Math.max(0, k);
       if (r < 1) return;
@@ -835,7 +840,7 @@ export function buildTimeline(d: DerivedTournament, o: RecapOptions, name: Name,
     if (d.drawn) scenes.push(drawScene(), groupStageScene());
     const any = Object.keys(d.t.results).length > 0;
     if (any) scenes.push(highlightsScene());
-    if (d.qualified.length === 32) scenes.push(qualifiedScene());
+    if (d.qualified.length === d.qualifierCount) scenes.push(qualifiedScene());
     for (const st of ['R32', 'R16', 'QF'] as KnockoutStage[]) if (stageMatches(d, st).some((m) => m.result)) scenes.push(roundScene(st));
     if (stageMatches(d, 'SF').some((m) => m.result)) scenes.push(versusScene('SF', ['SF-1', 'SF-2']));
     if (d.ko['3P'].result) scenes.push(versusScene('3P', ['3P']));

@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
-import { EDITION_IDS, EDITIONS, STAGE_SHORT, currentPhase, type EditionId, type KnockoutStage } from '../engine';
+import { EDITION_IDS, EDITIONS, FORMATS, STAGE_SHORT, currentPhase, stagesOf, type EditionId, type KnockoutStage } from '../engine';
 import { editionVisual, useEdition } from '../lib/theme';
 import { Emblem, Flag, Trophy } from '../components/brand';
 import { Icon, type IconName } from '../components/Icon';
@@ -44,7 +44,8 @@ export default function Home() {
   const name = useTeamName();
   const cd = useCountdown(t.kickoff);
   const phase = currentPhase(d);
-  const phaseIdx = PHASES.findIndex((p) => p.key === phase);
+  const phases = PHASES.filter((p) => !['R32', 'R16', 'QF'].includes(p.key) || stagesOf(t.format).includes(p.key as KnockoutStage));
+  const phaseIdx = phases.findIndex((p) => p.key === phase);
   const [editing, setEditing] = useState(false);
   const ed = useEdition();
 
@@ -71,7 +72,7 @@ export default function Home() {
           <div>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="flex items-center gap-3">
               <Emblem size={40} />
-              <span className="font-cond text-xs font-bold uppercase tracking-[0.3em] text-white/70 sm:text-sm sm:tracking-[0.42em]">Fan edition · 64 selecciones</span>
+              <span className="font-cond text-xs font-bold uppercase tracking-[0.3em] text-white/70 sm:text-sm sm:tracking-[0.42em]">Fan edition · {t.format} selecciones</span>
             </motion.div>
             <motion.h1 initial={{ opacity: 0, y: 30, letterSpacing: '0.3em' }} animate={{ opacity: 1, y: 0, letterSpacing: '0.02em' }} transition={{ duration: 0.9, ease: [0.2, 0.8, 0.2, 1] }} className="mt-5 font-display uppercase leading-[0.85]">
               <span className="block text-[2.4rem] text-white sm:text-6xl lg:text-7xl">World Cup</span>
@@ -179,19 +180,19 @@ export default function Home() {
           </div>
           <ProgressBar value={done / total} className="mt-4" />
           <div className="no-scrollbar mt-5 flex gap-1 overflow-x-auto pb-1">
-            {PHASES.map((p, i) => (
+            {phases.map((p, i) => (
               <div key={p.key} className="flex shrink-0 items-center gap-1">
                 <div className={cx('rounded-lg px-2.5 py-1.5 font-cond text-xs font-bold uppercase tracking-wider', i < phaseIdx ? 'bg-emerald/15 text-emerald-light' : i === phaseIdx ? 'bg-gold text-night-950 animate-pulse-ring' : 'bg-white/5 text-white/40')}>
                   {p.label}
                 </div>
-                {i < PHASES.length - 1 && <Icon name="chevronRight" size={14} className="text-white/25" />}
+                {i < phases.length - 1 && <Icon name="chevronRight" size={14} className="text-white/25" />}
               </div>
             ))}
           </div>
           <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <Stat label="Grupos completos" value={`${d.progress.groupsComplete}/16`} />
-            <Stat label="Partidos de grupo" value={`${d.progress.groupPlayed}/96`} />
-            <Stat label="Eliminatorias" value={`${d.progress.koPlayed}/32`} />
+            <Stat label="Grupos completos" value={`${d.progress.groupsComplete}/${d.progress.groupCount}`} />
+            <Stat label="Partidos de grupo" value={`${d.progress.groupPlayed}/${d.progress.groupTotal}`} />
+            <Stat label="Eliminatorias" value={`${d.progress.koPlayed}/${d.progress.koTotal}`} />
           </div>
         </Card>
       </div>
@@ -203,7 +204,7 @@ export default function Home() {
         {(
           [
             ['draw', 'Draw Ceremony', 'Sorteo animado con bombos, restricciones y modo manual.', 'draw', 'crimson'],
-            ['groups', 'Group Stage', '16 grupos, 96 partidos, tablas y desempates en vivo.', 'groups', 'emerald'],
+            ['groups', 'Group Stage', `${d.progress.groupCount} grupos, ${d.progress.groupTotal} partidos, tablas y desempates en vivo.`, 'groups', 'emerald'],
             ['knockout', 'Knockout', 'Cuadro interactivo: prórroga, penales y momentum.', 'bracket', 'gold'],
             ['road', 'Road to Glory', 'El recorrido completo de cualquier selección.', 'road', 'gold'],
             ['stats', 'Statistics', 'Goleadores, récords, gráficos y confederaciones.', 'stats', 'emerald'],
@@ -230,7 +231,7 @@ export default function Home() {
       </div>
 
       <p className="mx-auto max-w-3xl text-center text-xs leading-relaxed text-white/35">
-        Proyecto de aficionados sin afiliación oficial. El formato de 64 selecciones, la lista de participantes y las fechas son una configuración personalizada del usuario, no información oficial de los Mundiales 2030, 2034 o 2038.
+        Proyecto de aficionados sin afiliación oficial. La cantidad de selecciones, la lista de participantes y las fechas son una configuración personalizada del usuario, no información oficial de los Mundiales 2030, 2034 o 2038.
         Banderas: flag-icons (MIT). Música y efectos de sonido generados de forma procedural y original.
       </p>
     </div>
@@ -301,6 +302,7 @@ function EditionsPanel() {
               </div>
               <div className="relative mt-3 font-cond text-base font-bold uppercase tracking-wide" style={{ color: def.colors.accent[1] }}>{def.tagline}</div>
               <div className="relative text-sm text-white/70">{def.theme}</div>
+              <div className="relative mt-1 font-cond text-xs font-bold uppercase tracking-wider text-white/55">{FORMATS[id === t.edition ? t.format : def.defaultTeams].label}</div>
               <div className="relative mt-1 text-xs text-white/45">{EDITION_ART[id]}</div>
               <div className="relative mt-4 flex items-center gap-2">
                 {(id === t.edition ? t.hosts : def.defaultHosts).map((h) => (

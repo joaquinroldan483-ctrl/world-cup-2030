@@ -28,6 +28,11 @@ import {
   validateGroups,
   autoMomentum,
   replaceParticipant,
+  changeFormat,
+  bracketFor,
+  FORMATS,
+  TEAM_COUNTS,
+  stagesOf,
   migrateTournament,
   parseTournament,
   EDITIONS,
@@ -252,7 +257,7 @@ describe('knockout', () => {
       expect(m.homeId).toBeDefined();
       expect(m.winnerId).toBeDefined();
       for (const src of [m.home, m.away]) {
-        if (src.kind === 'group') continue;
+        if (src.kind === 'group' || src.kind === 'third') continue;
         const prev = d.ko[src.matchId];
         const expected = src.kind === 'winner' ? prev.winnerId : prev.loserId;
         expect(src === m.home ? m.homeId : m.awayId).toBe(expected);
@@ -417,7 +422,7 @@ describe('editions, participants and manual qualifiers', () => {
     for (const ed of ['2030', '2034', '2038'] as const) {
       const t = createTournament(undefined, ed);
       expect(t.edition).toBe(ed);
-      expect(t.participants).toHaveLength(64);
+      expect(t.participants).toHaveLength(EDITIONS[ed].defaultTeams);
       expect(new Set(t.ranking)).toEqual(new Set(t.participants));
       expect(t.hosts).toEqual(EDITIONS[ed].defaultHosts);
       expect(t.kickoff.startsWith(ed)).toBe(true);
@@ -472,5 +477,57 @@ describe('editions, participants and manual qualifiers', () => {
     expect(p.participants).toContain('SCO');
     expect(p.hosts).toEqual(['USA']);
     expect(p.groupOverrides[1]).toEqual(t.groups![1].slice().reverse());
+  });
+});
+
+describe('formats (16, 24, 32, 48, 64 teams)', () => {
+  for (const n of TEAM_COUNTS) {
+    it(`${n} teams: draw, groups, bracket and a complete tournament`, () => {
+      const f = FORMATS[n];
+      let t = createTournament('F', '2034', n);
+      expect(t.format).toBe(n);
+      expect(t.participants).toHaveLength(n);
+      expect(t.participants).toContain('KSA');
+      for (const mode of ['free', 'confederation', 'pots'] as const) {
+        const d = performDraw({ ...DEFAULT_DRAW_CONFIG, mode }, { rng: seededRandom(n), ranking: t.ranking, teamIds: t.participants, hosts: t.hosts });
+        expect(d.groups).toHaveLength(f.groups);
+        expect(new Set(d.groups.flat())).toEqual(new Set(t.participants));
+        expect(validateGroups(d.groups, { ...DEFAULT_DRAW_CONFIG, mode }, t.ranking, t.participants, t.hosts).filter((i) => i.level === 'error')).toEqual([]);
+        if (mode === 'free') t = { ...t, groups: d.groups };
+      }
+      const slots = bracketFor(n).slots;
+      expect(slots).toHaveLength(f.bracket);
+      expect(slots[0].stage).toBe(stagesOf(n)[0]);
+      t = simulatePending(t, { kind: 'all' }, seededRandom(n + 1));
+      const d = deriveTournament(t);
+      expect(d.progress.groupTotal).toBe(f.groups * 6);
+      expect(d.qualified).toHaveLength(f.bracket);
+      expect(new Set(d.qualified).size).toBe(f.bracket);
+      const first = d.knockout.filter((m) => m.stage === stagesOf(n)[0]);
+      expect(new Set(first.flatMap((m) => [m.homeId, m.awayId]))).toEqual(new Set(d.qualified));
+      // nobody meets a team of its own group in the first round
+      const groupOf = (id?: string) => d.groups.findIndex((g) => g.teamIds.includes(id!));
+      for (const m of first) expect(groupOf(m.homeId)).not.toBe(groupOf(m.awayId));
+      expect(d.champion).toBeDefined();
+      expect(d.knockout.every((m) => m.winnerId)).toBe(true);
+      if (f.thirds) {
+        expect(d.thirds.filter((x) => x.qualified)).toHaveLength(f.thirds);
+        const qThirds = new Set(d.thirds.filter((x) => x.qualified).map((x) => x.row.teamId));
+        for (const g of d.groups) expect(g.table.rows[2].status).toBe(qThirds.has(g.table.rows[2].teamId) ? 'qualified' : 'eliminated');
+      }
+      const j = buildJourney(d, d.champion!);
+      expect(j.knockoutSteps.map((s) => s.stage)).toEqual(stagesOf(n).filter((s) => s !== '3P'));
+    });
+  }
+  it('changing the format keeps hosts and best-ranked teams and resets the draw', () => {
+    const t = { ...drawnTournament(81), hosts: ['ESP', 'POR', 'MAR'] };
+    const small = changeFormat(t, 16);
+    expect(small.participants).toHaveLength(16);
+    for (const h of ['ESP', 'POR', 'MAR']) expect(small.participants).toContain(h);
+    expect(small.groups).toBeNull();
+    expect(small.results).toEqual({});
+    const big = changeFormat(small, 48);
+    expect(big.participants).toHaveLength(48);
+    expect(new Set(big.participants).size).toBe(48);
   });
 });

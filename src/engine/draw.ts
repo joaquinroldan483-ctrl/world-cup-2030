@@ -1,7 +1,6 @@
 import { TEAM_BY_ID } from './teams';
 import {
   CONFEDERATIONS,
-  GROUP_COUNT,
   GROUP_LETTERS,
   TEAMS_PER_GROUP,
   type Confederation,
@@ -30,14 +29,15 @@ export const DEFAULT_DRAW_CONFIG: DrawConfig = {
 
 export class DrawError extends Error {}
 
-/** Splits a ranking into 4 pots of 16 teams. */
+/** Splits a ranking into 4 pots (one team per pot in every group). */
 export function buildPots(ranking: string[], hostsSeeded: boolean, hosts: string[] = []): string[][] {
   let order = ranking.slice();
   if (hostsSeeded && hosts.length) {
     order = [...hosts.filter((h) => order.includes(h)), ...order.filter((id) => !hosts.includes(id))];
   }
   const pots: string[][] = [];
-  for (let p = 0; p < TEAMS_PER_GROUP; p++) pots.push(order.slice(p * GROUP_COUNT, (p + 1) * GROUP_COUNT));
+  const G = Math.ceil(order.length / TEAMS_PER_GROUP);
+  for (let p = 0; p < TEAMS_PER_GROUP; p++) pots.push(order.slice(p * G, (p + 1) * G));
   return pots;
 }
 
@@ -51,6 +51,7 @@ const confOf = (id: string): Confederation => {
 export function checkConfedFeasibility(teamIds: string[], confedMax: Record<Confederation, number>): string[] {
   const errors: string[] = [];
   const counts = countConfeds(teamIds);
+  const GROUP_COUNT = teamIds.length / TEAMS_PER_GROUP;
   for (const c of CONFEDERATIONS) {
     const max = confedMax[c];
     if (counts[c] > max * GROUP_COUNT) {
@@ -73,7 +74,7 @@ interface SolverState {
   conf: Record<Confederation, number>[];
 }
 
-function emptyState(): SolverState {
+function emptyState(GROUP_COUNT: number): SolverState {
   return {
     groups: Array.from({ length: GROUP_COUNT }, () => []),
     conf: Array.from(
@@ -120,7 +121,7 @@ function canComplete(state: SolverState, remaining: string[], c: Constraint, bud
   let bestOpts: number[] | null = null;
   for (let i = 0; i < remaining.length; i++) {
     const opts: number[] = [];
-    for (let g = 0; g < GROUP_COUNT; g++) if (canPlace(state, g, remaining[i], c)) opts.push(g);
+    for (let g = 0; g < state.groups.length; g++) if (canPlace(state, g, remaining[i], c)) opts.push(g);
     if (opts.length === 0) return false;
     if (!bestOpts || opts.length < bestOpts.length) {
       best = i;
@@ -158,8 +159,9 @@ export interface DrawOptions {
 export function performDraw(config: DrawConfig, opts: DrawOptions): DrawResult {
   const rng = opts.rng ?? secureRandom;
   const teamIds = opts.teamIds;
-  if (new Set(teamIds).size !== GROUP_COUNT * TEAMS_PER_GROUP) {
-    throw new DrawError(`Se necesitan exactamente ${GROUP_COUNT * TEAMS_PER_GROUP} selecciones distintas.`);
+  const GROUP_COUNT = teamIds.length / TEAMS_PER_GROUP;
+  if (!Number.isInteger(GROUP_COUNT) || GROUP_COUNT < 2 || GROUP_COUNT > 16 || new Set(teamIds).size !== teamIds.length) {
+    throw new DrawError('La cantidad de selecciones debe ser múltiplo de 4 (entre 8 y 64), sin repetidas.');
   }
   if (config.mode === 'manual') throw new DrawError('El sorteo manual no se realiza automáticamente.');
 
@@ -190,7 +192,7 @@ export function performDraw(config: DrawConfig, opts: DrawOptions): DrawResult {
 
   for (let attempt = 0; attempt < 25; attempt++) {
     try {
-      const state = emptyState();
+      const state = emptyState(GROUP_COUNT);
       const steps: DrawStep[] = [];
       hosts.forEach((h, i) => {
         place(state, i, h);
@@ -255,6 +257,7 @@ export function validateGroups(
   hosts: string[] = [],
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
+  const GROUP_COUNT = teamIds.length / TEAMS_PER_GROUP;
   if (groups.length !== GROUP_COUNT) issues.push({ level: 'error', message: `Debe haber ${GROUP_COUNT} grupos.` });
   const seen = new Map<string, number>();
   groups.forEach((g, gi) => {
@@ -304,7 +307,8 @@ export function completeManualDraw(
   teamIds: string[],
   rng: RNG = secureRandom,
 ): string[][] {
-  const state = emptyState();
+  const GROUP_COUNT = partial.length;
+  const state = emptyState(GROUP_COUNT);
   partial.forEach((g, gi) => g.forEach((id) => place(state, gi, id)));
   const used = new Set(partial.flat());
   const remaining = shuffle(teamIds.filter((id) => !used.has(id)), rng);

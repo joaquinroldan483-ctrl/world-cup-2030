@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { useMemo, useState } from 'react';
-import { GROUP_LETTERS, TIEBREAK_LABEL, simulatePending, type GroupFixture, type GroupView } from '../engine';
+import { FORMATS, GROUP_LETTERS, TIEBREAK_LABEL, simulatePending, type GroupFixture, type GroupView } from '../engine';
 import { Flag } from '../components/brand';
 import { Icon } from '../components/Icon';
 import { EventGlyph } from '../components/match';
@@ -26,7 +26,7 @@ export default function Groups({ param }: { param?: string }) {
     return (
       <>
         <SectionHeader eyebrow="Group Stage · Fase de grupos" title="Group Stage" accent="emerald" />
-        <EmptyState icon="draw" title="Primero, el sorteo" message="Realizá y confirmá el sorteo de grupos para generar automáticamente los 96 partidos de la fase de grupos." action={<Button variant="gold" icon="draw" onClick={() => navigate('draw')}>Ir al sorteo</Button>} />
+        <EmptyState icon="draw" title="Primero, el sorteo" message="Realizá y confirmá el sorteo de grupos para generar automáticamente todos los partidos de la fase de grupos." action={<Button variant="gold" icon="draw" onClick={() => navigate('draw')}>Ir al sorteo</Button>} />
       </>
     );
 
@@ -50,7 +50,7 @@ export default function Groups({ param }: { param?: string }) {
         subtitle="Cargá el resultado exacto de cada partido. Las tablas se recalculan al instante con los criterios de desempate configurados."
         actions={
           <>
-            <Button variant="outline" icon="sparkles" onClick={simulateAll} disabled={d.progress.groupPlayed === 96}>Simular pendientes</Button>
+            <Button variant="outline" icon="sparkles" onClick={simulateAll} disabled={d.progress.groupPlayed === d.progress.groupTotal}>Simular pendientes</Button>
             <Button variant="gold" icon="bracket" onClick={() => navigate('knockout')}>Eliminatorias</Button>
           </>
         }
@@ -59,10 +59,10 @@ export default function Groups({ param }: { param?: string }) {
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex-1">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-white/70">{d.progress.groupPlayed} de 96 partidos jugados · {d.progress.groupsComplete}/16 grupos completos</span>
-              <span className="font-display text-lg text-gold-light">{Math.round((d.progress.groupPlayed / 96) * 100)}%</span>
+              <span className="text-white/70">{d.progress.groupPlayed} de {d.progress.groupTotal} partidos jugados · {d.progress.groupsComplete}/{d.progress.groupCount} grupos completos</span>
+              <span className="font-display text-lg text-gold-light">{Math.round((d.progress.groupPlayed / d.progress.groupTotal) * 100)}%</span>
             </div>
-            <ProgressBar value={d.progress.groupPlayed / 96} className="mt-2" tone="emerald" />
+            <ProgressBar value={d.progress.groupPlayed / d.progress.groupTotal} className="mt-2" tone="emerald" />
           </div>
           <div className="flex flex-wrap gap-2">
             <Segmented value={view} onChange={setView} options={[{ value: 'groups', label: 'Grupos' }, { value: 'matchday', label: 'Por jornada' }]} />
@@ -82,6 +82,7 @@ export default function Groups({ param }: { param?: string }) {
       ) : (
         <MatchdayView groups={d.groups} onOpen={open} />
       )}
+      {d.thirds.length > 0 && <BestThirds />}
       <p className="mt-6 text-xs text-white/40">
         Criterios de desempate: {d.t.tiebreakers.map((c) => TIEBREAK_LABEL[c]).join(' → ')}.{' '}
         <button className="text-gold-light underline-offset-2 hover:underline" onClick={() => navigate('settings')}>Configurar</button>
@@ -283,5 +284,46 @@ function ManualQualifiers({ g }: { g: GroupView }) {
         <Button size="sm" variant="gold" icon="check" onClick={() => save(order)}>Fijar clasificados</Button>
       </div>
     </div>
+  );
+}
+
+/** Ranking of third-placed teams (formats with best thirds: 24 and 48 teams). */
+function BestThirds() {
+  const d = useDerived();
+  const name = useTeamName();
+  const n = FORMATS[d.t.format].thirds;
+  const final = d.thirds.some((x) => x.qualified);
+  return (
+    <Card className="mt-5 p-4 sm:p-5">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-2xl uppercase">Mejores terceros</h2>
+        <Chip tone={final ? 'emerald' : 'neutral'}>{final ? 'Definido' : 'Provisorio'} · pasan {n} de {d.thirds.length}</Chip>
+      </div>
+      <p className="mb-3 text-xs text-white/45">Orden: puntos, diferencia de gol, goles a favor, victorias, juego limpio y sorteo. Cada tercero clasificado se cruza con un ganador de otro grupo.</p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[460px] text-sm">
+          <thead className="font-cond text-[11px] uppercase tracking-[0.12em] text-white/40">
+            <tr>
+              {['#', 'Selección', 'Grupo', 'PJ', 'DG', 'GF', 'PTS'].map((h) => <th key={h} className="py-1.5 text-left font-bold">{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {d.thirds.map((x) => (
+              <tr key={x.row.teamId} className={cx('border-t border-white/5 tabular', x.rank > n && 'opacity-50')}>
+                <td className="py-1.5">
+                  <span className={cx('flex h-6 w-6 items-center justify-center rounded-md font-cond text-xs font-bold', x.rank <= n ? (final ? 'bg-emerald text-white' : 'bg-emerald/20 text-emerald-light') : 'bg-white/6 text-white/50')}>{x.rank}</span>
+                </td>
+                <td><span className="flex items-center gap-2"><Flag id={x.row.teamId} className="w-6" />{name(x.row.teamId)}</span></td>
+                <td>{GROUP_LETTERS[x.group]}</td>
+                <td>{x.row.played}</td>
+                <td>{x.row.goalDiff > 0 ? `+${x.row.goalDiff}` : x.row.goalDiff}</td>
+                <td>{x.row.goalsFor}</td>
+                <td className="font-display text-base">{x.row.points}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

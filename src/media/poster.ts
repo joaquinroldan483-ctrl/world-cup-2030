@@ -280,7 +280,7 @@ function pathSection(ctx: Ctx, x: number, y: number, w: number, rowH: number, ti
 function summaryPoster(ctx: Ctx, W: number, H: number, u: number, o: PosterOptions, d: DerivedTournament, name: Name, A: MediaAssets, p: Palette) {
   const Hu = H / u;
   const s = computeStats(d);
-  header(ctx, W, u, A, p, `${s.matches}/128 PARTIDOS`);
+  header(ctx, W, u, A, p, `${s.matches}/${d.progress.groupTotal + d.progress.koTotal} PARTIDOS`);
   const showWinners = Hu > 1600;
   const showTiles = Hu > 1200;
   const nameS = Hu > 1600 ? 160 : Hu > 1200 ? 130 : 110;

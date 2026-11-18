@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ParticipantsEditor } from '../components/Participants';
 import { MomentumViewToggle } from '../components/Momentum';
-import { DEFAULT_TIEBREAKERS, EDITIONS, EDITION_IDS, STAGE_SHORT, TEAM_BY_ID, TIEBREAK_LABEL, rankingFor, type EditionId, type KnockoutStage, type TiebreakCriterion } from '../engine';
+import { changeFormat, FORMATS, TEAM_COUNTS, type TeamCount, DEFAULT_TIEBREAKERS, EDITIONS, EDITION_IDS, STAGE_SHORT, TEAM_BY_ID, TIEBREAK_LABEL, rankingFor, type EditionId, type KnockoutStage, type TiebreakCriterion } from '../engine';
 import { Flag } from '../components/brand';
 import { Icon } from '../components/Icon';
 import { Button, Card, Chip, cx, IconButton, Select, SectionHeader, TextInput, Toggle } from '../components/ui';
@@ -53,6 +53,27 @@ function TournamentCard() {
             commit((x) => ({ ...x, edition: v, hosts: EDITIONS[v].hostsEditable ? x.hosts : EDITIONS[v].defaultHosts.filter((h) => x.participants.includes(h)) }), { label: `Cambiar a ${v}` })
           }
           options={EDITION_IDS.map((id) => ({ value: id, label: `${EDITIONS[id].title} · ${EDITIONS[id].theme}` }))}
+        />
+        <Select
+          label="Cantidad de selecciones"
+          value={String(t.format)}
+          onChange={async (v) => {
+            const n = Number(v) as TeamCount;
+            if (n === t.format) return;
+            const busy = !!t.groups || Object.keys(t.results).length > 0;
+            if (
+              busy &&
+              !(await confirmDialog({
+                title: `Cambiar a ${n} selecciones`,
+                message: `Cambia el formato a ${FORMATS[n].description}. Se borrarán el sorteo y los resultados de esta simulación (podés deshacerlo). ${n < t.format ? 'Se mantienen las mejores del ranking y los anfitriones.' : 'Se agregan las siguientes del ranking; después podés cambiarlas.'}`,
+                confirmLabel: 'Cambiar formato',
+                danger: true,
+              }))
+            )
+              return;
+            await commit((x) => changeFormat(x, n), { label: `Formato de ${n} selecciones` });
+          }}
+          options={TEAM_COUNTS.map((n) => ({ value: String(n), label: `${FORMATS[n].label} · ${FORMATS[n].description}` }))}
         />
         <label className="block">
           <span className="label mb-1.5 block">Inicio del torneo (cuenta regresiva)</span>
@@ -257,7 +278,7 @@ function Ranking() {
   const set = (next: string[]) => commit((x) => ({ ...x, ranking: next }), { label: 'Editar ranking' });
   const moveTo = (id: string, pos: number) => {
     const next = t.ranking.filter((x) => x !== id);
-    next.splice(Math.max(0, Math.min(63, pos)), 0, id);
+    next.splice(Math.max(0, Math.min(t.ranking.length - 1, pos)), 0, id);
     void set(next);
   };
   return (
@@ -279,25 +300,25 @@ function Ranking() {
                 defaultValue={i + 1}
                 key={`${id}-${i}`}
                 onBlur={(e) => {
-                  const n = parseInt(e.target.value, 10);
+                  const n = Math.min(parseInt(e.target.value, 10), t.ranking.length);
                   if (Number.isFinite(n) && n - 1 !== i) moveTo(id, n - 1);
                 }}
                 aria-label={`Posición de ${TEAM_BY_ID[id].name}`}
               />
               <Flag id={id} className="w-6" />
               <span className="flex-1 truncate text-sm">{TEAM_BY_ID[id].name}</span>
-              <span className="text-[10px] text-white/35">Bombo {Math.floor(i / 16) + 1}</span>
+              <span className="text-[10px] text-white/35">Bombo {Math.floor(i / (t.ranking.length / 4)) + 1}</span>
               <IconButton icon="chevronDown" className="h-8 w-8 rotate-180" label="Subir" disabled={i === 0} onClick={() => moveTo(id, i - 1)} />
-              <IconButton icon="chevronDown" className="h-8 w-8" label="Bajar" disabled={i === 63} onClick={() => moveTo(id, i + 1)} />
+              <IconButton icon="chevronDown" className="h-8 w-8" label="Bajar" disabled={i === t.ranking.length - 1} onClick={() => moveTo(id, i + 1)} />
             </li>
           ))}
         </ol>
       ) : (
         <div className="flex flex-wrap gap-1">
-          {t.ranking.slice(0, 16).map((id, i) => (
+          {t.ranking.slice(0, t.ranking.length / 4).map((id, i) => (
             <span key={id} className="flex items-center gap-1 rounded-md bg-white/5 px-1.5 py-0.5 text-xs"><b className="text-white/40">{i + 1}</b><Flag id={id} className="w-4" />{id}</span>
           ))}
-          <span className="px-1 text-xs text-white/40">… y 48 más</span>
+          <span className="px-1 text-xs text-white/40">… y {t.ranking.length - t.ranking.length / 4} más</span>
         </div>
       )}
     </Card>
@@ -345,7 +366,7 @@ function About() {
     <Card className="p-5 xl:col-span-2">
       <h2 className="mb-2 font-display text-2xl uppercase">Acerca de</h2>
       <div className="grid gap-4 text-sm text-white/60 md:grid-cols-3">
-        <p><b className="text-white">Configuración no oficial.</b> El formato de 64 selecciones y la lista de participantes son una configuración personalizada. Proyecto de aficionados sin afiliación con la FIFA ni con las federaciones.</p>
+        <p><b className="text-white">Configuración no oficial.</b> La cantidad de selecciones (16 a 64), la lista de participantes y las fechas son una configuración personalizada. Proyecto de aficionados sin afiliación con la FIFA ni con las federaciones.</p>
         <p><b className="text-white">Recursos.</b> Banderas: flag-icons (licencia MIT). Tipografías: Anton, Barlow Condensed e Inter (SIL OFL). El emblema, el trofeo y los escudos son ilustraciones originales de esta app.</p>
         <p><b className="text-white">Audio.</b> La música de los vídeos y todos los efectos se generan de forma procedural en el navegador (Web Audio): composiciones originales, sin canciones comerciales.</p>
       </div>

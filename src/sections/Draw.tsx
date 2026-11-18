@@ -24,9 +24,9 @@ import { useStore, useTeamName } from '../store/tournament';
 import { confirmDialog, toast } from '../store/ui';
 
 const MODES: { id: DrawMode; title: string; desc: string; icon: IconName }[] = [
-  { id: 'free', title: 'Sorteo libre', desc: 'Totalmente aleatorio: las 64 bolillas en un solo bombo.', icon: 'shuffle' },
+  { id: 'free', title: 'Sorteo libre', desc: 'Totalmente aleatorio: todas las bolillas en un solo bombo.', icon: 'shuffle' },
   { id: 'confederation', title: 'Por confederación', desc: 'Aleatorio con límites configurables de selecciones por confederación en cada grupo.', icon: 'flag' },
-  { id: 'pots', title: 'Bombos por ranking', desc: '4 bombos de 16 según tu ranking personalizado: una selección de cada bombo por grupo.', icon: 'star' },
+  { id: 'pots', title: 'Bombos por ranking', desc: '4 bombos según tu ranking personalizado: una selección de cada bombo por grupo.', icon: 'star' },
   { id: 'manual', title: 'Sorteo manual', desc: 'Colocá cada selección en el grupo que quieras, con validación de reglas.', icon: 'edit' },
 ];
 
@@ -61,7 +61,7 @@ export default function Draw() {
         eyebrow="Draw Ceremony · Sorteo de grupos"
         title="Draw Ceremony"
         accent="crimson"
-        subtitle="64 selecciones, 16 grupos de 4. Elegí el tipo de sorteo, configurá las reglas y viví la ceremonia bolilla por bolilla."
+        subtitle={`${t.format} selecciones, ${t.format / 4} grupos de 4. Elegí el tipo de sorteo, configurá las reglas y viví la ceremonia bolilla por bolilla.`}
         actions={
           phase !== 'setup' && (
             <Button variant="outline" icon="shuffle" onClick={() => setPhase('setup')}>
@@ -107,7 +107,7 @@ async function saveDraw(groups: string[][], steps: DrawStep[], mode: DrawMode): 
   if (done) {
     sound.qualified();
     fireConfetti({ count: 160 });
-    toast({ kind: 'success', title: 'Sorteo confirmado y guardado', message: 'Los 96 partidos de la fase de grupos ya están generados.' });
+    toast({ kind: 'success', title: 'Sorteo confirmado y guardado', message: `Los ${groups.length * 6} partidos de la fase de grupos ya están generados.` });
   }
   return done;
 }
@@ -171,13 +171,13 @@ function Setup({ onStart, onCancel }: { onStart: (cfg: DrawConfig) => void; onCa
               <div className="space-y-2">
                 {CONFEDERATIONS.map((c) => {
                   const n = teams.filter((x) => x.confederation === c).length;
-                  const ok = n <= cfg.confedMax[c] * 16;
+                  const ok = n <= cfg.confedMax[c] * (t.format / 4);
                   return (
                     <div key={c} className="flex items-center justify-between gap-3 rounded-xl border border-white/6 bg-night-950/40 px-3 py-2">
                       <div>
                         <div className="font-cond text-[15px] font-bold uppercase tracking-wide">{c}</div>
                         <div className={cx('text-[11px]', ok ? 'text-white/45' : 'text-crimson-light')}>
-                          {n} selecciones · capacidad {cfg.confedMax[c] * 16}
+                          {n} selecciones · capacidad {cfg.confedMax[c] * (t.format / 4)}
                         </div>
                       </div>
                       <Stepper size="sm" min={1} max={4} value={cfg.confedMax[c]} onChange={(v) => set({ confedMax: { ...cfg.confedMax, [c]: v } })} />
@@ -218,7 +218,7 @@ function Setup({ onStart, onCancel }: { onStart: (cfg: DrawConfig) => void; onCa
           ) : (
             <>
               <div className="flex items-center justify-between gap-2">
-                <div className="label">Participantes · 64 selecciones</div>
+                <div className="label">Participantes · {t.format} selecciones</div>
                 <Button size="sm" variant="ghost" icon="swap" onClick={() => navigate('settings', 'participantes')}>Cambiar selecciones</Button>
               </div>
               <div className="mt-3 grid grid-cols-8 gap-1.5 sm:grid-cols-11 xl:grid-cols-13">
@@ -286,7 +286,7 @@ function Ceremony({ result, onRedo, onSaved, onBack }: { result: DrawResult; onR
 
   const current = revealed > 0 ? steps[revealed - 1] : undefined;
   const partial = useMemo(() => {
-    const g: string[][] = Array.from({ length: 16 }, () => ['', '', '', '']);
+    const g: string[][] = Array.from({ length: result.groups.length }, () => ['', '', '', '']);
     steps.slice(0, revealed).forEach((s) => (g[s.group][s.slot] = s.teamId));
     return g;
   }, [steps, revealed]);
@@ -357,7 +357,7 @@ function Ceremony({ result, onRedo, onSaved, onBack }: { result: DrawResult; onR
           <Card className="p-5">
             <div className="label mb-2">Validación</div>
             {errors.length === 0 ? (
-              <p className="flex items-center gap-2 text-sm text-emerald-light"><Icon name="check" /> 16 grupos de 4 · 64 selecciones únicas · reglas cumplidas</p>
+              <p className="flex items-center gap-2 text-sm text-emerald-light"><Icon name="check" /> {result.groups.length} grupos de 4 · {result.groups.length * 4} selecciones únicas · reglas cumplidas</p>
             ) : (
               <ul className="space-y-1 text-sm text-crimson-light">{errors.map((e) => <li key={e.message}>• {e.message}</li>)}</ul>
             )}
@@ -520,13 +520,13 @@ function Overview({ onReplay }: { onReplay: () => void }) {
 function ManualBoard({ onSaved, onBack }: { onSaved: () => void; onBack: () => void }) {
   const t = useStore((s) => s.t);
   const name = useTeamName();
-  const [groups, setGroups] = useState<string[][]>(() => (t.groups ? t.groups.map((g) => g.slice()) : Array.from({ length: 16 }, () => ['', '', '', ''])));
+  const [groups, setGroups] = useState<string[][]>(() => (t.groups ? t.groups.map((g) => g.slice()) : Array.from({ length: t.format / 4 }, () => ['', '', '', ''])));
   const [poolSel, setPoolSel] = useState<string | null>(null);
   const [slotSel, setSlotSel] = useState<{ g: number; i: number } | null>(null);
   const [filter, setFilter] = useState('');
   const placed = new Set(groups.flat().filter(Boolean));
   const pool = t.participants.map((id) => TEAM_BY_ID[id]).filter((x) => !placed.has(x.id) && (!filter || x.name.toLowerCase().includes(filter.toLowerCase()) || x.confederation.toLowerCase() === filter.toLowerCase()));
-  const complete = placed.size === 64;
+  const complete = placed.size === t.format;
   const cfg = { ...t.drawConfig, mode: 'manual' as const };
   const issues = validateGroups(groups.map((g) => g.filter(Boolean)), cfg, t.ranking, t.participants, t.hosts).filter((i) => complete || !i.message.includes('no está asignada') && !i.message.includes('tiene'));
   const invalid = new Set(issues.filter((i) => i.message.startsWith('Grupo')).map((i) => GROUP_LETTERS.indexOf(i.message.split(' ')[1].replace(':', ''))));
@@ -570,13 +570,13 @@ function ManualBoard({ onSaved, onBack }: { onSaved: () => void; onBack: () => v
       <Card className="p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="font-display text-xl uppercase">Tablero manual · {placed.size}/64</div>
+            <div className="font-display text-xl uppercase">Tablero manual · {placed.size}/{t.format}</div>
             <div className="text-sm text-white/55">Tocá una selección y luego un lugar del grupo. Tocá una selección ya ubicada para moverla o intercambiarla. En escritorio también podés arrastrar.</div>
           </div>
           <div className="flex flex-wrap gap-2">
             {slotSel && groups[slotSel.g][slotSel.i] && <Button size="sm" variant="danger" icon="x" onClick={removeSelected}>Quitar {name(groups[slotSel.g][slotSel.i])}</Button>}
             <Button size="sm" variant="outline" icon="shuffle" disabled={complete} onClick={() => { setGroups(completeManualDraw(groups.map((g) => g.filter(Boolean)), cfg, t.participants).map((g) => g.slice())); sound.reveal(); }}>Completar al azar</Button>
-            <Button size="sm" variant="ghost" icon="trash" onClick={() => { setGroups(Array.from({ length: 16 }, () => ['', '', '', ''])); setSlotSel(null); }}>Vaciar</Button>
+            <Button size="sm" variant="ghost" icon="trash" onClick={() => { setGroups(Array.from({ length: t.format / 4 }, () => ['', '', '', ''])); setSlotSel(null); }}>Vaciar</Button>
             <Button size="sm" variant="ghost" onClick={onBack}>Configuración</Button>
           </div>
         </div>

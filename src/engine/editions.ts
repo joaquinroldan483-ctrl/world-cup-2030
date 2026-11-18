@@ -1,7 +1,7 @@
 /**
  * World Cup editions supported by the app, each with its own identity.
  * Hosts of 2030 (Spain, Portugal, Morocco) and 2034 (Saudi Arabia) follow FIFA's announcements;
- * the 2038 hosts are chosen by the user. In every edition the 64-team format, the list of
+ * the 2038 hosts are chosen by the user. In every edition the number of teams, the list of
  * participants and the dates are a custom configuration, not official information.
  */
 export type EditionId = '2030' | '2034' | '2038';
@@ -34,6 +34,8 @@ export interface EditionDef {
   description: string;
   facts: string[];
   defaultHosts: string[];
+  /** Default number of teams for new tournaments of this edition. */
+  defaultTeams: import('./formats').TeamCount;
   /** Whether the user picks the hosts (2038). */
   hostsEditable: boolean;
   /** Text used for posters and video when there are no editable hosts. */
@@ -57,6 +59,7 @@ export const EDITIONS: Record<EditionId, EditionDef> = {
       'FIFA anunció partidos conmemorativos del centenario en Uruguay, Argentina y Paraguay.',
     ],
     defaultHosts: ['ESP', 'POR', 'MAR'],
+    defaultTeams: 64,
     hostsEditable: false,
     hostsLabel: 'ESPAÑA · PORTUGAL · MAROC',
     kickoff: '2030-06-13T19:00',
@@ -82,9 +85,10 @@ export const EDITIONS: Record<EditionId, EditionDef> = {
     facts: [
       'Anfitrión: Arabia Saudita, confirmado por el Congreso de la FIFA en diciembre de 2024.',
       'Primera Copa del Mundo con un único anfitrión de Oriente Medio desde Qatar 2022.',
-      'Formato oficial previsto de 48 selecciones; en esta app se juega con tu configuración de 64.',
+      'Formato oficial previsto de 48 selecciones (12 grupos y 8 mejores terceros); podés elegir 16, 24, 32, 48 o 64.',
     ],
     defaultHosts: ['KSA'],
+    defaultTeams: 48,
     hostsEditable: false,
     hostsLabel: 'ARABIA SAUDITA · السعودية',
     kickoff: '2034-06-15T19:00',
@@ -113,6 +117,7 @@ export const EDITIONS: Record<EditionId, EditionDef> = {
       'Formato, participantes y fechas son una configuración personalizada.',
     ],
     defaultHosts: [],
+    defaultTeams: 48,
     hostsEditable: true,
     hostsLabel: 'SEDE POR DEFINIR',
     kickoff: '2038-06-11T19:00',

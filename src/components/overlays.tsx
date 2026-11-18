@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect } from 'react';
-import { STAGE_LABEL, TEAM_BY_ID, formatScoreline, type KnockoutStage } from '../engine';
+import { STAGE_LABEL, TEAM_BY_ID, formatScoreline, stagesOf, type KnockoutStage } from '../engine';
 import { celebrationBurst, fireConfetti } from '../lib/confetti';
 import { navigate } from '../lib/router';
 import { sound } from '../lib/sound';
@@ -135,7 +135,7 @@ export function CelebrationHost() {
               <div className="font-display text-xl uppercase tracking-wide">
                 {current.teamIds.map((id) => name(id)).join(' · ')}
               </div>
-              <div className="text-xs text-white/60">Ya tiene{current.teamIds.length > 1 ? 'n' : ''} su lugar en dieciseisavos de final</div>
+              <div className="text-xs text-white/60">Ya tiene{current.teamIds.length > 1 ? 'n' : ''} su lugar en {STAGE_LABEL[stagesOf(d.t.format)[0]].toLowerCase()}</div>
             </div>
           </div>
         </motion.div>
@@ -156,7 +156,7 @@ export function CelebrationHost() {
           <motion.div className="relative text-center" initial={{ scale: 1.4, opacity: 0, letterSpacing: '0.5em' }} animate={{ scale: 1, opacity: 1, letterSpacing: '0.04em' }} transition={{ delay: 0.5, duration: 0.8, ease: [0.2, 0.8, 0.2, 1] }}>
             <div className="label mb-3 !text-gold-light">{current.stage === 'GROUPS_DONE' ? 'Fase de grupos completada' : `${STAGE_LABEL[current.stage as KnockoutStage]} completados`}</div>
             <div className="font-display text-5xl uppercase text-gold-gradient sm:text-8xl">
-              {current.stage === 'GROUPS_DONE' ? 'Dieciseisavos' : nextStageLabel[current.stage as KnockoutStage] ?? 'Gran final'}
+              {current.stage === 'GROUPS_DONE' ? STAGE_LABEL[stagesOf(d.t.format)[0]].replace(' de final', '') : nextStageLabel[current.stage as KnockoutStage] ?? 'Gran final'}
             </div>
             <div className="mt-3 font-cond text-lg font-bold uppercase tracking-[0.3em] text-white/70">Los cruces están definidos</div>
           </motion.div>
